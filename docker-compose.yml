@@ -1,0 +1,37 @@
+services:
+  switchos-exporter:
+    build: .
+    container_name: switchos-exporter
+    restart: unless-stopped
+    ports:
+      - "9000:9000"
+    environment:
+      - PYTHONUNBUFFERED=1
+    deploy:
+      resources:
+        limits:
+          cpus: '2.0'      # Allow up to 2 CPU cores
+          memory: 1G       # 1GB max memory - will auto-restart if exceeded
+        reservations:
+          cpus: '0.5'      # Reserve 0.5 CPU cores
+          memory: 256M     # Reserve 256MB memory
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/metrics"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    volumes:
+      - ./logs:/app/logs:rw
+      - ./.env:/app/.env:ro  # Mount .env file for configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "3"
+    labels:
+      - "com.docker.compose.project=switchos-exporter"
+      - "description=MikroTik SwitchOS Prometheus Exporter"
+
+volumes:
+  logs:
