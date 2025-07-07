@@ -61,7 +61,7 @@ class NetboxClient:
                         'site': device.get('site', {}).get('name', 'Unknown') if device.get('site') else 'Unknown',
                         'site_id': device.get('site', {}).get('slug', 'unknown') if device.get('site') else 'unknown',
                         'site_description': device.get('site', {}).get('description', '') if device.get('site') else '',
-                        'location': device.get('location', {}).get('name', '') if device.get('location') else '',
+                        'location': device.get('location', {}).get('name', 'Unknown') if device.get('location') else 'Unknown',
                         'device_role': device.get('role', {}).get('name', 'Unknown') if device.get('role') else 'Unknown',
                         'device_model': device.get('device_type', {}).get('model', 'Unknown') if device.get('device_type') else 'Unknown',
                         'manufacturer': device.get('device_type', {}).get('manufacturer', {}).get('name', 'Unknown') if device.get('device_type', {}).get('manufacturer') else 'Unknown'

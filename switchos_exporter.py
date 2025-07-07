@@ -28,11 +28,12 @@ class SwitchOSExporter:
         self.setup_metrics()
         
     def sanitize_label(self, label_value: str) -> str:
-        """Sanitize label values for Prometheus (only alphanumeric and underscores)"""
+        """Sanitize label values for Prometheus (preserve dots, spaces, and common punctuation)"""
         if not label_value:
             return 'Unknown'
         import re
-        return re.sub(r'[^a-zA-Z0-9_]', '_', str(label_value))
+        # Allow alphanumeric, dots, spaces, hyphens, and commas - only replace truly problematic characters
+        return re.sub(r'[^a-zA-Z0-9\.\s\-,]', '_', str(label_value))
         
     def setup_metrics(self):
         """Initialize Prometheus metrics"""
@@ -41,134 +42,134 @@ class SwitchOSExporter:
         self.device_up = Gauge(
             'switchos_device_up',
             'Device reachability status (1=up, 0=down)',
-            ['device_name', 'site', 'site_id', 'device_model', 'manufacturer', 'device_role']
+            ['device_name', 'site', 'site_id', 'location', 'device_model', 'manufacturer', 'device_role']
         )
         
         self.collection_duration = Gauge(
             'switchos_collection_duration_seconds',
             'Time spent collecting metrics from device',
-            ['device_name', 'site', 'site_id']
+            ['device_name', 'site', 'site_id', 'location']
         )
         
         # System metrics
         self.system_uptime = Gauge(
             'switchos_system_uptime_seconds',
             'System uptime in seconds',
-            ['device_name', 'site', 'site_id', 'device_model', 'serial_id']
+            ['device_name', 'site', 'site_id', 'location', 'device_model', 'serial_id']
         )
         
         self.system_temperature = Gauge(
             'switchos_system_temperature_celsius',
             'System temperature in Celsius',
-            ['device_name', 'site', 'site_id']
+            ['device_name', 'site', 'site_id', 'location']
         )
         
         # Port metrics
         self.port_status = Gauge(
             'switchos_port_status',
             'Port status (1=enabled, 0=disabled)',
-            ['device_name', 'site', 'site_id', 'port_name', 'port_index']
+            ['device_name', 'site', 'site_id', 'location', 'port_name', 'port_index']
         )
         
         self.port_link_status = Gauge(
             'switchos_port_link_status',
             'Port link status (1=linked, 0=down)',
-            ['device_name', 'site', 'site_id', 'port_name', 'port_index']
+            ['device_name', 'site', 'site_id', 'location', 'port_name', 'port_index']
         )
         
         self.port_speed_mbps = Gauge(
             'switchos_port_speed_mbps',
             'Port speed in Mbps',
-            ['device_name', 'site', 'site_id', 'port_name', 'port_index']
+            ['device_name', 'site', 'site_id', 'location', 'port_name', 'port_index']
         )
         
         # Port statistics
         self.port_rx_bytes = Counter(
             'switchos_port_rx_bytes_total',
             'Total received bytes',
-            ['device_name', 'site', 'site_id', 'port_name', 'port_index']
+            ['device_name', 'site', 'site_id', 'location', 'port_name', 'port_index']
         )
         
         self.port_tx_bytes = Counter(
             'switchos_port_tx_bytes_total',
             'Total transmitted bytes',
-            ['device_name', 'site', 'site_id', 'port_name', 'port_index']
+            ['device_name', 'site', 'site_id', 'location', 'port_name', 'port_index']
         )
         
         self.port_rx_packets = Counter(
             'switchos_port_rx_packets_total',
             'Total received packets',
-            ['device_name', 'site', 'site_id', 'port_name', 'port_index']
+            ['device_name', 'site', 'site_id', 'location', 'port_name', 'port_index']
         )
         
         self.port_tx_packets = Counter(
             'switchos_port_tx_packets_total',
             'Total transmitted packets',
-            ['device_name', 'site', 'site_id', 'port_name', 'port_index']
+            ['device_name', 'site', 'site_id', 'location', 'port_name', 'port_index']
         )
         
         self.port_rx_errors = Counter(
             'switchos_port_rx_errors_total',
             'Total receive errors',
-            ['device_name', 'site', 'site_id', 'port_name', 'port_index']
+            ['device_name', 'site', 'site_id', 'location', 'port_name', 'port_index']
         )
         
         self.port_tx_errors = Counter(
             'switchos_port_tx_errors_total',
             'Total transmit errors',
-            ['device_name', 'site', 'site_id', 'port_name', 'port_index']
+            ['device_name', 'site', 'site_id', 'location', 'port_name', 'port_index']
         )
         
         # VLAN metrics
         self.vlan_count = Gauge(
             'switchos_vlan_count',
             'Number of configured VLANs',
-            ['device_name', 'site', 'site_id']
+            ['device_name', 'site', 'site_id', 'location']
         )
         
         self.vlan_ports = Gauge(
             'switchos_vlan_port_members',
             'Number of member ports in VLAN',
-            ['device_name', 'site', 'site_id', 'vlan_id']
+            ['device_name', 'site', 'site_id', 'location', 'vlan_id']
         )
         
         # MAC table metrics
         self.mac_table_entries = Gauge(
             'switchos_mac_table_entries',
             'Number of MAC address table entries',
-            ['device_name', 'site', 'site_id']
+            ['device_name', 'site', 'site_id', 'location']
         )
         
         self.mac_table_entries_by_vlan = Gauge(
             'switchos_mac_table_entries_by_vlan',
             'MAC address table entries per VLAN',
-            ['device_name', 'site', 'site_id', 'vlan_id']
+            ['device_name', 'site', 'site_id', 'location', 'vlan_id']
         )
         
         # SFP metrics
         self.sfp_temperature = Gauge(
             'switchos_sfp_temperature_celsius',
             'SFP module temperature in Celsius',
-            ['device_name', 'site', 'site_id', 'sfp_index', 'vendor', 'part_number']
+            ['device_name', 'site', 'site_id', 'location', 'sfp_index', 'vendor', 'part_number']
         )
         
         self.sfp_tx_power = Gauge(
             'switchos_sfp_tx_power_mw',
             'SFP module TX power in milliwatts',
-            ['device_name', 'site', 'site_id', 'sfp_index', 'vendor', 'part_number']
+            ['device_name', 'site', 'site_id', 'location', 'sfp_index', 'vendor', 'part_number']
         )
         
         self.sfp_rx_power = Gauge(
             'switchos_sfp_rx_power_mw',
             'SFP module RX power in milliwatts',
-            ['device_name', 'site', 'site_id', 'sfp_index', 'vendor', 'part_number']
+            ['device_name', 'site', 'site_id', 'location', 'sfp_index', 'vendor', 'part_number']
         )
         
         # Info metrics
         self.device_info = Info(
             'switchos_device_info',
             'Device information',
-            ['device_name', 'site', 'site_id']
+            ['device_name', 'site', 'site_id', 'location']
         )
         
     def collect_device_metrics(self, device: Dict[str, Any]):
@@ -177,6 +178,7 @@ class SwitchOSExporter:
         device_ip = device['ip']
         site = self.sanitize_label(device['site'])
         site_id = self.sanitize_label(device['site_id'])
+        location = self.sanitize_label(device['location'])
         
         logger.info(f"Collecting metrics from {device_name} ({device_ip}) at site {site_id}")
         
@@ -191,6 +193,7 @@ class SwitchOSExporter:
                 'device_name': device_name,
                 'site': site,
                 'site_id': site_id,
+                'location': location,
                 'device_model': self.sanitize_label(device.get('device_model', 'Unknown')),
                 'manufacturer': self.sanitize_label(device.get('manufacturer', 'Unknown')),
                 'device_role': self.sanitize_label(device.get('device_role', 'Unknown'))
@@ -204,7 +207,8 @@ class SwitchOSExporter:
             self.collection_duration.labels(
                 device_name=device_name,
                 site=site,
-                site_id=site_id
+                site_id=site_id,
+                location=location
             ).set(duration)
             
             if metrics['up']:
@@ -220,6 +224,7 @@ class SwitchOSExporter:
                     'device_name': self.sanitize_label(device.get('name', 'Unknown')),
                     'site': self.sanitize_label(device.get('site', 'Unknown')),
                     'site_id': self.sanitize_label(device.get('site_id', 'unknown')),
+                    'location': self.sanitize_label(device.get('location', 'Unknown')),
                     'device_model': self.sanitize_label(device.get('device_model', 'Unknown')),
                     'manufacturer': self.sanitize_label(device.get('manufacturer', 'Unknown')),
                     'device_role': self.sanitize_label(device.get('device_role', 'Unknown'))
@@ -237,11 +242,12 @@ class SwitchOSExporter:
             
             if 'uptime_seconds' in sys_info:
                 try:
-                    # system_uptime needs: device_name, site, site_id, device_model, serial_id
+                    # system_uptime needs: device_name, site, site_id, location, device_model, serial_id
                     self.system_uptime.labels(
                         device_name=labels['device_name'],
                         site=labels['site'],
                         site_id=labels['site_id'],
+                        location=labels['location'],
                         device_model=labels['device_model'],
                         serial_id=self.sanitize_label(sys_info.get('serial_id', 'Unknown'))
                     ).set(sys_info['uptime_seconds'])
@@ -252,7 +258,8 @@ class SwitchOSExporter:
                 self.system_temperature.labels(
                     device_name=labels['device_name'],
                     site=labels['site'],
-                    site_id=labels['site_id']
+                    site_id=labels['site_id'],
+                    location=labels['location']
                 ).set(sys_info['temperature_c'])
             
             # Device info
@@ -266,7 +273,8 @@ class SwitchOSExporter:
             self.device_info.labels(
                 device_name=labels['device_name'],
                 site=labels['site'],
-                site_id=labels['site_id']
+                site_id=labels['site_id'],
+                location=labels['location']
             ).info(info_data)
         
         # Port metrics
@@ -276,6 +284,7 @@ class SwitchOSExporter:
                     'device_name': labels['device_name'],
                     'site': labels['site'],
                     'site_id': labels['site_id'],
+                    'location': labels['location'],
                     'port_name': self.sanitize_label(port['name']),
                     'port_index': str(port['index'])
                 }
@@ -291,6 +300,7 @@ class SwitchOSExporter:
                     'device_name': labels['device_name'],
                     'site': labels['site'],
                     'site_id': labels['site_id'],
+                    'location': labels['location'],
                     'port_name': self.sanitize_label(port_stat['port_name']),
                     'port_index': str(port_stat['port_index'])
                 }
@@ -315,7 +325,8 @@ class SwitchOSExporter:
             self.vlan_count.labels(
                 device_name=labels['device_name'],
                 site=labels['site'],
-                site_id=labels['site_id']
+                site_id=labels['site_id'],
+                location=labels['location']
             ).set(vlan_count)
             
             for vlan in metrics['vlan_table']:
@@ -323,6 +334,7 @@ class SwitchOSExporter:
                     device_name=labels['device_name'],
                     site=labels['site'],
                     site_id=labels['site_id'],
+                    location=labels['location'],
                     vlan_id=str(vlan['vlan_id'])
                 ).set(vlan['member_count'])
         
@@ -333,7 +345,8 @@ class SwitchOSExporter:
             self.mac_table_entries.labels(
                 device_name=labels['device_name'],
                 site=labels['site'],
-                site_id=labels['site_id']
+                site_id=labels['site_id'],
+                location=labels['location']
             ).set(mac_stats['total_entries'])
             
             for vlan_id, count in mac_stats.get('entries_by_vlan', {}).items():
@@ -341,6 +354,7 @@ class SwitchOSExporter:
                     device_name=labels['device_name'],
                     site=labels['site'],
                     site_id=labels['site_id'],
+                    location=labels['location'],
                     vlan_id=str(vlan_id)
                 ).set(count)
         
@@ -351,6 +365,7 @@ class SwitchOSExporter:
                     'device_name': labels['device_name'],
                     'site': labels['site'],
                     'site_id': labels['site_id'],
+                    'location': labels['location'],
                     'sfp_index': str(sfp['index']),
                     'vendor': self.sanitize_label(sfp.get('vendor', 'Unknown')),
                     'part_number': self.sanitize_label(sfp.get('part_number', 'Unknown'))
