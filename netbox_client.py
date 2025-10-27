@@ -13,7 +13,7 @@ class NetboxClient:
         self.api_url = os.getenv('netbox_api_url', '').rstrip('/')
         self.api_token = os.getenv('netbox_api_token', '')
         self.manufacturer = os.getenv('netbox_manufacturer', 'MikroTik')
-        self.role = os.getenv('netbox_role', 'switch')
+        self.platform = os.getenv('netbox_platform', 'SwitchOS')
         self.tags = os.getenv('netbox_tags', 'Monitoring')
         
         if not self.api_url or not self.api_token:
@@ -32,7 +32,7 @@ class NetboxClient:
         # Build query parameters
         params = {
             'manufacturer': self.manufacturer.lower(),  # Use slug format
-            'role': self.role.lower(),  # Use slug format
+            'platform': self.platform.lower(),  # Use slug format
             'tag': self.tags.lower(),  # Tags are also slugified
             'status': 'active',  # Only fetch active devices
             'has_primary_ip': 'true'  # Only devices with primary IP
@@ -42,7 +42,7 @@ class NetboxClient:
         
         try:
             logger.info(f"Fetching devices from Netbox: {endpoint}")
-            logger.info(f"Filters: manufacturer={self.manufacturer}, role={self.role}, tags={self.tags}")
+            logger.info(f"Filters: manufacturer={self.manufacturer}, platform={self.platform}, tags={self.tags}")
             
             # Fetch all pages of results
             while endpoint:
