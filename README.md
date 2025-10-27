@@ -73,7 +73,7 @@ netbox_api_url=http://your-netbox-server:8000/api/
 
 # Netbox Device Filters
 netbox_manufacturer=MikroTik
-netbox_role=switch
+netbox_platform=SwitchOS
 netbox_tags=Monitoring
 ```
 
@@ -157,16 +157,39 @@ scrape_configs:
 
 ## Monitoring and Alerting
 
-### Sample PromQL Queries
+### PromQL Queries
+
+For a comprehensive collection of ready-to-use PromQL queries, see **[PROMQL_QUERIES.md](PROMQL_QUERIES.md)**.
+
+This includes queries for:
+- Port bandwidth and traffic analysis
+- Port status and health monitoring
+- Device health and uptime
+- SFP metrics and diagnostics
+- Top N analysis
+- Alerting queries
+- Grafana dashboard examples
+
+### Quick Examples
+
+**Port RX Bandwidth (Mbps)**:
+```promql
+rate(switchos_port_rx_bytes_total[5m]) * 8 / 1000000
+```
+
+**Port TX Bandwidth (Mbps)**:
+```promql
+rate(switchos_port_tx_bytes_total[5m]) * 8 / 1000000
+```
 
 **Device Status**:
 ```promql
 switchos_device_up
 ```
 
-**Port Utilization**:
+**Top 10 Ports by Bandwidth**:
 ```promql
-rate(switchos_port_rx_bytes_total[5m]) * 8
+topk(10, rate(switchos_port_rx_bytes_total[5m]) * 8 / 1000000)
 ```
 
 **SFP Temperature**:
@@ -176,7 +199,7 @@ switchos_sfp_temperature_celsius
 
 **Site-based Filtering**:
 ```promql
-switchos_device_up{site_id="000001"}
+rate(switchos_port_rx_bytes_total{site="000001"}[5m]) * 8 / 1000000
 ```
 
 ### Sample Alerts
