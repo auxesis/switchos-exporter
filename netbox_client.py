@@ -15,10 +15,11 @@ class NetboxClient:
         self.manufacturer = os.getenv('netbox_manufacturer', 'MikroTik')
         self.platform = os.getenv('netbox_platform', 'SwitchOS')
         self.tags = os.getenv('netbox_tags', 'Monitoring')
-        
+        self.timeout = 30  # Request timeout in seconds
+
         if not self.api_url or not self.api_token:
             raise ValueError("Netbox API URL and token must be set in .env file")
-        
+
         self.headers = {
             'Authorization': f'Token {self.api_token}',
             'Content-Type': 'application/json',
@@ -46,7 +47,7 @@ class NetboxClient:
             
             # Fetch all pages of results
             while endpoint:
-                response = requests.get(endpoint, headers=self.headers, params=params)
+                response = requests.get(endpoint, headers=self.headers, params=params, timeout=self.timeout)
                 response.raise_for_status()
                 
                 data = response.json()
@@ -97,7 +98,8 @@ class NetboxClient:
             response = requests.get(
                 f"{self.api_url}/dcim/manufacturers/",
                 headers=self.headers,
-                params={'limit': 1}
+                params={'limit': 1},
+                timeout=self.timeout
             )
             response.raise_for_status()
             logger.info("Successfully connected to Netbox API")

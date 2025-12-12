@@ -5,6 +5,7 @@ services:
     restart: unless-stopped
     ports:
       - "9000:9000"
+      - "9001:9001"  # Health check port
     environment:
       - PYTHONUNBUFFERED=1
     deploy:
@@ -16,11 +17,12 @@ services:
           cpus: '0.5'      # Reserve 0.5 CPU cores
           memory: 256M     # Reserve 256MB memory
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/metrics"]
+      # Check health endpoint - returns 503 if collection is stale
+      test: ["CMD", "curl", "-f", "http://localhost:9001/health"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 60s
+      start_period: 120s  # Allow 2 minutes for initial collection
     volumes:
       - ./logs:/app/logs:rw
       - ./.env:/app/.env:ro  # Mount .env file for configuration

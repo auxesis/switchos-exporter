@@ -7,6 +7,7 @@ Collects metrics from MikroTik switches discovered via Netbox
 import time
 import logging
 import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
 from typing import Dict, List, Any
 from prometheus_client import start_http_server, Gauge, Counter, Info, Enum, REGISTRY
 from netbox_client import NetboxClient
@@ -20,11 +21,15 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 class SwitchOSExporter:
-    def __init__(self, port: int = 9000):
+    def __init__(self, port: int = 9000, health_port: int = 9001):
         self.port = port
+        self.health_port = health_port
         self.netbox_client = NetboxClient()
         self.switchos_client = SwitchOSClient()
         self.metrics = {}
+        self.last_collection_time = 0
+        self.last_collection_success = False
+        self.collection_interval = 60
         self.setup_metrics()
         
     def sanitize_label(self, label_value: str) -> str:
@@ -170,6 +175,22 @@ class SwitchOSExporter:
             'switchos_device_info',
             'Device information',
             ['device_name', 'site', 'site_id', 'location']
+        )
+
+        # Exporter health metrics
+        self.last_collection_timestamp = Gauge(
+            'switchos_exporter_last_collection_timestamp',
+            'Unix timestamp of last successful collection cycle'
+        )
+
+        self.collection_cycle_duration = Gauge(
+            'switchos_exporter_collection_cycle_duration_seconds',
+            'Duration of last collection cycle in seconds'
+        )
+
+        self.devices_collected = Gauge(
+            'switchos_exporter_devices_collected',
+            'Number of devices collected in last cycle'
         )
         
     def collect_device_metrics(self, device: Dict[str, Any]):
@@ -380,20 +401,37 @@ class SwitchOSExporter:
     
     def collect_all_metrics(self):
         """Collect metrics from all devices"""
+        cycle_start = time.time()
+        devices_count = 0
+
         try:
             # Get devices from Netbox
             devices = self.netbox_client.fetch_devices()
             logger.info(f"Found {len(devices)} devices to monitor")
-            
+
             # Collect metrics from each device
             for device in devices:
                 self.collect_device_metrics(device)
-                
+                devices_count += 1
+
+            # Update health tracking
+            self.last_collection_time = time.time()
+            self.last_collection_success = True
+            self.last_collection_timestamp.set(self.last_collection_time)
+            self.devices_collected.set(devices_count)
+
         except Exception as e:
             logger.error(f"Error in metric collection cycle: {e}")
+            self.last_collection_success = False
+
+        # Always update cycle duration
+        cycle_duration = time.time() - cycle_start
+        self.collection_cycle_duration.set(cycle_duration)
     
     def start_collection_loop(self, interval: int = 60):
         """Start the metrics collection loop"""
+        self.collection_interval = interval
+
         def collection_loop():
             while True:
                 try:
@@ -404,19 +442,67 @@ class SwitchOSExporter:
                 except Exception as e:
                     logger.error(f"Error in collection loop: {e}")
                     time.sleep(30)  # Shorter sleep on error
-        
+
         # Start collection in background thread
         collection_thread = threading.Thread(target=collection_loop, daemon=True)
         collection_thread.start()
         logger.info(f"Started metrics collection loop with {interval}s interval")
+
+    def is_healthy(self) -> bool:
+        """Check if the exporter is healthy (collecting metrics recently)"""
+        if self.last_collection_time == 0:
+            # Allow grace period for initial startup (3x interval)
+            return True
+
+        time_since_collection = time.time() - self.last_collection_time
+        max_allowed = self.collection_interval * 3  # Allow 3x interval before unhealthy
+
+        return time_since_collection < max_allowed and self.last_collection_success
+
+    def start_health_server(self):
+        """Start a simple HTTP server for health checks"""
+        exporter = self
+
+        class HealthHandler(BaseHTTPRequestHandler):
+            def log_message(self, format, *args):
+                pass  # Suppress access logs
+
+            def do_GET(self):
+                if self.path == '/health' or self.path == '/healthz':
+                    if exporter.is_healthy():
+                        self.send_response(200)
+                        self.send_header('Content-Type', 'text/plain')
+                        self.end_headers()
+                        msg = f"OK - last collection {int(time.time() - exporter.last_collection_time)}s ago\n"
+                        self.wfile.write(msg.encode())
+                    else:
+                        self.send_response(503)
+                        self.send_header('Content-Type', 'text/plain')
+                        self.end_headers()
+                        msg = f"UNHEALTHY - last collection {int(time.time() - exporter.last_collection_time)}s ago\n"
+                        self.wfile.write(msg.encode())
+                else:
+                    self.send_response(404)
+                    self.end_headers()
+
+        def run_health_server():
+            server = HTTPServer(('0.0.0.0', self.health_port), HealthHandler)
+            server.serve_forever()
+
+        health_thread = threading.Thread(target=run_health_server, daemon=True)
+        health_thread.start()
+        logger.info(f"Health check server started on http://0.0.0.0:{self.health_port}/health")
     
     def run(self, collection_interval: int = 60):
         """Run the exporter"""
         logger.info(f"Starting SwitchOS Prometheus Exporter on port {self.port}")
-        
+
+        # Start health check server
+        self.start_health_server()
+
         # Start metrics collection
         self.start_collection_loop(collection_interval)
-        
+
         # Start HTTP server
         start_http_server(self.port)
         logger.info(f"Prometheus metrics server started on http://0.0.0.0:{self.port}/metrics")
