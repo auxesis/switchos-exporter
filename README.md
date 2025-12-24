@@ -2,6 +2,8 @@
 
 A comprehensive Prometheus exporter for MikroTik switches running SwitchOS. This exporter discovers devices from Netbox API and collects detailed metrics including port status, SFP module information, VLAN configuration, MAC address tables, and system information.
 
+![Grafana Dashboard](dashboard.png)
+
 ## Features
 
 - **Automatic Device Discovery**: Fetches MikroTik switches from Netbox API based on configurable filters
