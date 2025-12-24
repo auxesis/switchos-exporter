@@ -1,0 +1,14 @@
+.env
+.env.*
+!.env.example
+.git
+.gitignore
+__pycache__
+*.pyc
+*.log
+logs/
+*.md
+!README.md
+grafana-dashboard.json
+PROMQL_QUERIES.md
+LICENSE
