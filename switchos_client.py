@@ -234,23 +234,20 @@ class SwitchOSClient:
                     
                     # Add numeric values if available
                     if i < len(temperatures):
-                        # Convert hex temperature to Celsius
-                        temp_val = temperatures[i]
-                        if isinstance(temp_val, str):
-                            if temp_val.startswith('0x'):
-                                temp_val = int(temp_val, 16)
-                            else:
-                                temp_val = int(temp_val.strip('"'), 16) if temp_val.strip('"').startswith('0x') else 0
-                        module['temperature_c'] = temp_val / 256.0 if temp_val else 0
-                    
+                        # SwOS reports temperature as a signed value in whole
+                        # degrees C (no scaling; the web UI uses no scale factor).
+                        # -128 (0xffffff80) is the "no DDM diagnostics" sentinel,
+                        # e.g. for copper DAC modules - omit it rather than emit.
+                        temp_val = self._hex_to_int(temperatures[i])
+                        if temp_val >= 0x80000000:          # sign-extend 32-bit
+                            temp_val -= 0x100000000
+                        if temp_val != -128:
+                            module['temperature_c'] = float(temp_val)
+
                     if i < len(voltages):
-                        volt_val = voltages[i]
-                        if isinstance(volt_val, str):
-                            if volt_val.startswith('0x'):
-                                volt_val = int(volt_val, 16)
-                            else:
-                                volt_val = int(volt_val.strip('"'), 16) if volt_val.strip('"').startswith('0x') else 0
-                        module['voltage_v'] = volt_val / 10000.0 if volt_val else 0
+                        # SwOS voltage is millivolts (web UI scale 1E3 -> volts)
+                        volt_val = self._hex_to_int(voltages[i])
+                        module['voltage_v'] = volt_val / 1000.0 if volt_val else 0
                     
                     if i < len(tx_power):
                         tx_val = tx_power[i]
