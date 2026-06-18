@@ -837,6 +837,25 @@ class SwitchOSClient:
         
         return metrics
     
+    # SwOS Lite sys.b obfuscated field name -> canonical SwOS key. Taken from
+    # the SwOS Lite web UI System/Health pages (swos-css610out-2.21.bin).
+    _SWOSLITE_SYS_MAP = {
+        'i01': 'upt',   # uptime
+        'i03': 'mac',   # MAC address
+        'i04': 'sid',   # serial number
+        'i05': 'id',    # identity
+        'i06': 'ver',   # version
+        'i07': 'brd',   # board model
+        'i0b': 'bld',   # firmware build timestamp
+        'i22': 'temp',  # CPU temperature
+    }
+
+    @classmethod
+    def _translate_swoslite_sys(cls, data: Dict) -> Dict:
+        """Map SwOS Lite sys.b obfuscated keys to canonical SwOS keys."""
+        return {canon: data[obf] for obf, canon in cls._SWOSLITE_SYS_MAP.items()
+                if obf in data}
+
     def get_system_info(self, device_ip: str) -> Optional[Dict]:
         """Get system information from device"""
         url = f"http://{device_ip}/sys.b"
@@ -864,7 +883,11 @@ class SwitchOSClient:
                 
                 # Parse the fixed JSON
                 data = json.loads(json_text)
-                
+
+                # SwOS Lite uses obfuscated sys.b field names (i01..); translate.
+                if 'i06' in data and 'ver' not in data:
+                    data = self._translate_swoslite_sys(data)
+
                 # Decode all hex values automatically
                 return self._decode_hex_value(data)
             except Exception as e:
