@@ -131,12 +131,14 @@ devices:
     password: a-different-password
 ```
 
-A top-level `port:` sets the metrics port (default `9000`); the `--port` CLI flag
-overrides it.
+Top-level `port:` and `collection_interval:` set the metrics port (default
+`9000`) and scrape interval in seconds (default `60`); the `--port` and
+`--collection-interval` CLI flags override them.
 
 | Field | Required | Default | Notes |
 |-------|----------|---------|-------|
 | `port` | no | `9000` | Top-level. Metrics port; overridden by `--port` |
+| `collection_interval` | no | `60` | Top-level. Scrape interval (s); overridden by `--collection-interval` |
 | `name` | yes | — | Device name (`device_name` label) |
 | `ip` | yes | — | IPv4 address; CIDR suffix (e.g. `/24`) is stripped |
 | `user`, `password` | yes (here or in `defaults`) | from `defaults` | SwitchOS digest-auth credentials |
@@ -145,12 +147,14 @@ overrides it.
 ### Command line
 
 ```
-python3 switchos_exporter.py [--port PORT] [config]
+python3 switchos_exporter.py [--port PORT] [--collection-interval SECONDS] [config]
 ```
 
 - `config` — path to the YAML config file (default `devices.yaml`, or
   `$SWITCHOS_CONFIG`).
-- `--port` — metrics port; overrides the `port:` set in the config file.
+- `--port` — metrics port; overrides `port:` in the config file.
+- `--collection-interval` — scrape interval in seconds; overrides
+  `collection_interval:` in the config file.
 
 ```bash
 # custom config file on a custom port
@@ -175,9 +179,10 @@ mise install            # install Python 3.11 + create .venv
 mise run setup          # install dependencies into .venv
 cp devices.yaml.example devices.yaml   # then edit it
 
-mise run run            # run on the default port
-mise run run -- --port 9080 my_custom_devices.yaml   # pass CLI args after --
+mise run exporter       # run on the default port
+mise run exporter -- --port 9080 my_custom_devices.yaml   # pass CLI args after --
 mise run config         # validate the config file
+mise run test           # run the test suite
 ```
 
 ### Method 2: Direct Python

@@ -2,14 +2,16 @@
 #
 # All configuration lives in this single file. Copy it to devices.yaml and edit.
 #
-# `port`      - metrics port (optional, default 9000). The --port CLI flag
-#               overrides this.
+# `port`                 - metrics port (optional, default 9000).
+# `collection_interval`  - seconds between scrape cycles (optional, default 60).
+#                          Both are overridden by the matching CLI flags.
 # `defaults`  - applied to every device unless overridden per-device.
 # `devices`   - the switches to scrape. Only `name` and `ip` are required;
 #               `user`, `password`, `device_model` and `manufacturer` fall back
 #               to `defaults`.
 
 port: 9000
+collection_interval: 60
 
 defaults:
   user: admin

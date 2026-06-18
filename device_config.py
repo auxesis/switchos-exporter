@@ -34,13 +34,21 @@ class DeviceConfigClient:
         with open(self.config_file, 'r') as f:
             return yaml.safe_load(f) or {}
 
+    def _get_int(self, key: str, default: int) -> int:
+        """Return a top-level integer setting from the config file, or `default`."""
+        value = self._load().get(key, default)
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            raise ValueError(f"'{key}' in '{self.config_file}' must be an integer")
+
     def get_port(self, default: int = 9000) -> int:
         """Return the metrics port from the config file, or `default`."""
-        port = self._load().get('port', default)
-        try:
-            return int(port)
-        except (TypeError, ValueError):
-            raise ValueError(f"'port' in '{self.config_file}' must be an integer")
+        return self._get_int('port', default)
+
+    def get_collection_interval(self, default: int = 60) -> int:
+        """Return the collection interval (seconds) from the config, or `default`."""
+        return self._get_int('collection_interval', default)
 
     def fetch_devices(self) -> List[Dict[str, str]]:
         """Load and normalise devices from the YAML config file."""

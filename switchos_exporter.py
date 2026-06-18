@@ -521,20 +521,23 @@ def main():
              f"(default: {DEFAULT_PORT})",
     )
     parser.add_argument(
-        "--collection-interval", type=int, default=60,
-        help="Seconds between collection cycles (default: 60)",
+        "--collection-interval", type=int, default=None,
+        help="Seconds between collection cycles. Overrides 'collection_interval' "
+             "in the config file (default: 60)",
     )
     args = parser.parse_args()
 
     try:
         device_client = DeviceConfigClient(args.config)
-        # Port precedence: --port > config file 'port' > default
+        # CLI flags override config-file settings, which override the defaults.
         port = args.port if args.port is not None else device_client.get_port(DEFAULT_PORT)
+        interval = (args.collection_interval if args.collection_interval is not None
+                    else device_client.get_collection_interval(60))
     except ValueError as e:
         parser.error(str(e))
 
     exporter = SwitchOSExporter(device_client, port=port)
-    exporter.run(collection_interval=args.collection_interval)
+    exporter.run(collection_interval=interval)
 
 
 if __name__ == "__main__":
