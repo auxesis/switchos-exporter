@@ -10,8 +10,8 @@ python = "3.11"
 _.python.venv = { path = ".venv", create = true }
 
 [tasks.setup]
-description = "Install Python dependencies into the project virtualenv"
-run = "pip install -r requirements.txt"
+description = "Install Python dependencies (incl. dev/test) into the virtualenv"
+run = "pip install -r requirements-dev.txt"
 
 [tasks.exporter]
 description = "Run the exporter (pass args after --, e.g. mise run exporter -- --port 9080 my.yaml)"

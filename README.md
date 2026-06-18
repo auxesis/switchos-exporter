@@ -368,18 +368,35 @@ switchos-exporter/
 ├── device_config.py        # YAML config loader (devices + settings)
 ├── switchos_client.py      # SwitchOS communication
 ├── requirements.txt        # Python dependencies
+├── requirements-dev.txt    # Dev/test dependencies
 ├── mise.toml              # Python toolchain + dev tasks (mise)
 ├── Dockerfile             # Container definition
 ├── docker-compose.yml     # Docker deployment
 ├── devices.yaml.example  # Configuration template (port + defaults + devices)
+├── tests/                 # Test suite + captured device fixtures
 └── README.md            # This file
 ```
+
+### Testing
+
+The test suite runs the full parse pipeline against captured device responses
+(fixtures) — no switch required — and covers every exported metric plus
+SwOS/SwOS Lite parity.
+
+```bash
+pip install -r requirements-dev.txt
+pytest -q                 # or: mise run test
+```
+
+See [tests/README.md](tests/README.md) for how the fixtures work and how to
+**add test data captured from a new device** (including redacting identifiers
+before committing).
 
 ### Contributing
 
 1. Follow Python PEP 8 style guidelines
 2. Add appropriate logging for debugging
-3. Test with both Python and Docker deployments
+3. Add fixtures and tests when adding support for a new device (see tests/README.md)
 4. Update documentation for new features
 
 ## License
