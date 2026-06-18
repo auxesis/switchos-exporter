@@ -6,6 +6,10 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+# Virtualenv / mise
+.venv/
+.mise.local.toml
+
 # Logs
 logs/
 *.log

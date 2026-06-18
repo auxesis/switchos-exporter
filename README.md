@@ -131,15 +131,31 @@ devices:
     password: a-different-password
 ```
 
+A top-level `port:` sets the metrics port (default `9000`); the `--port` CLI flag
+overrides it.
+
 | Field | Required | Default | Notes |
 |-------|----------|---------|-------|
+| `port` | no | `9000` | Top-level. Metrics port; overridden by `--port` |
 | `name` | yes | — | Device name (`device_name` label) |
 | `ip` | yes | — | IPv4 address; CIDR suffix (e.g. `/24`) is stripped |
 | `user`, `password` | yes (here or in `defaults`) | from `defaults` | SwitchOS digest-auth credentials |
 | `device_model`, `manufacturer` | no | from `defaults`, else `Unknown` | Prometheus labels (on `switchos_device_up`) |
 
-The config file defaults to `devices.yaml` in the working directory; override the
-path with the `SWITCHOS_CONFIG` environment variable.
+### Command line
+
+```
+python3 switchos_exporter.py [--port PORT] [config]
+```
+
+- `config` — path to the YAML config file (default `devices.yaml`, or
+  `$SWITCHOS_CONFIG`).
+- `--port` — metrics port; overrides the `port:` set in the config file.
+
+```bash
+# custom config file on a custom port
+python3 switchos_exporter.py --port 9080 my_custom_devices.yaml
+```
 
 ## Installation and Deployment
 
@@ -149,7 +165,22 @@ path with the `SWITCHOS_CONFIG` environment variable.
 - Network access to the MikroTik switches
 - MikroTik switches with SwitchOS and HTTP API enabled
 
-### Method 1: Direct Python Deployment
+### Method 1: mise (recommended for development)
+
+This repo ships a [mise](https://mise.jdx.dev) config that pins Python and
+manages a project-local virtualenv.
+
+```bash
+mise install            # install Python 3.11 + create .venv
+mise run setup          # install dependencies into .venv
+cp devices.yaml.example devices.yaml   # then edit it
+
+mise run run            # run on the default port
+mise run run -- --port 9080 my_custom_devices.yaml   # pass CLI args after --
+mise run config         # validate the config file
+```
+
+### Method 2: Direct Python
 
 1. **Install Dependencies**:
    ```bash
@@ -165,6 +196,7 @@ path with the `SWITCHOS_CONFIG` environment variable.
 3. **Run the Exporter**:
    ```bash
    python3 switchos_exporter.py
+   # or: python3 switchos_exporter.py --port 9080 my_custom_devices.yaml
    ```
 
 4. **Verify Operation**:
@@ -172,7 +204,7 @@ path with the `SWITCHOS_CONFIG` environment variable.
    curl http://localhost:9000/metrics
    ```
 
-### Method 2: Docker Deployment
+### Method 3: Docker Deployment
 
 1. **Configure**:
    ```bash
@@ -327,13 +359,14 @@ groups:
 ### Project Structure
 ```
 switchos-exporter/
-├── switchos_exporter.py    # Main exporter application
-├── device_config.py        # YAML device inventory loader
+├── switchos_exporter.py    # Main exporter application (CLI entry point)
+├── device_config.py        # YAML config loader (devices + settings)
 ├── switchos_client.py      # SwitchOS communication
 ├── requirements.txt        # Python dependencies
+├── mise.toml              # Python toolchain + dev tasks (mise)
 ├── Dockerfile             # Container definition
 ├── docker-compose.yml     # Docker deployment
-├── devices.yaml.example  # Configuration template (defaults + devices)
+├── devices.yaml.example  # Configuration template (port + defaults + devices)
 └── README.md            # This file
 ```
 

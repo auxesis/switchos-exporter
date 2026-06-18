@@ -1,0 +1,22 @@
+# mise configuration for the SwitchOS exporter.
+# Install mise (https://mise.jdx.dev), then run `mise install` followed by
+# `mise run setup`. A project-local .venv is created and activated automatically.
+
+[tools]
+python = "3.11"
+
+[env]
+# Create and auto-activate a virtualenv at .venv for this project.
+_.python.venv = { path = ".venv", create = true }
+
+[tasks.setup]
+description = "Install Python dependencies into the project virtualenv"
+run = "pip install -r requirements.txt"
+
+[tasks.run]
+description = "Run the exporter (pass args after --, e.g. mise run run -- --port 9080 my.yaml)"
+run = "python3 switchos_exporter.py"
+
+[tasks.config]
+description = "Validate the device config file (prints the loaded devices)"
+run = "python3 device_config.py"

@@ -18,21 +18,35 @@ class DeviceConfigClient:
     exporter consumes, with credentials and labels resolved against defaults.
     """
 
-    def __init__(self):
-        self.config_file = os.getenv('SWITCHOS_CONFIG', DEFAULT_CONFIG_FILE)
+    def __init__(self, config_file: str = None):
+        # Precedence: explicit argument (CLI) > SWITCHOS_CONFIG env > default.
+        self.config_file = config_file or os.getenv('SWITCHOS_CONFIG', DEFAULT_CONFIG_FILE)
 
         if not os.path.isfile(self.config_file):
             raise ValueError(
                 f"Config file not found: '{self.config_file}'. "
-                f"Create it (see devices.yaml.example) or set SWITCHOS_CONFIG."
+                f"Create it (see devices.yaml.example), pass it on the command "
+                f"line, or set SWITCHOS_CONFIG."
             )
+
+    def _load(self) -> Dict:
+        """Read and parse the YAML config file."""
+        with open(self.config_file, 'r') as f:
+            return yaml.safe_load(f) or {}
+
+    def get_port(self, default: int = 9000) -> int:
+        """Return the metrics port from the config file, or `default`."""
+        port = self._load().get('port', default)
+        try:
+            return int(port)
+        except (TypeError, ValueError):
+            raise ValueError(f"'port' in '{self.config_file}' must be an integer")
 
     def fetch_devices(self) -> List[Dict[str, str]]:
         """Load and normalise devices from the YAML config file."""
         logger.info(f"Loading configuration from: {self.config_file}")
 
-        with open(self.config_file, 'r') as f:
-            config = yaml.safe_load(f) or {}
+        config = self._load()
 
         defaults = config.get('defaults') or {}
         if not isinstance(defaults, dict):

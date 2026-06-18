@@ -6,12 +6,16 @@ Collects metrics from MikroTik switches listed in a YAML config file
 
 import time
 import logging
+import argparse
 import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from typing import Dict, List, Any
 from prometheus_client import start_http_server, Gauge, Counter, Info, Enum, REGISTRY
 from device_config import DeviceConfigClient
 from switchos_client import SwitchOSClient
+
+DEFAULT_PORT = 9000
+DEFAULT_HEALTH_PORT = 9001
 
 # Configure logging
 logging.basicConfig(
@@ -21,10 +25,11 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 class SwitchOSExporter:
-    def __init__(self, port: int = 9000, health_port: int = 9001):
+    def __init__(self, device_client: DeviceConfigClient,
+                 port: int = DEFAULT_PORT, health_port: int = DEFAULT_HEALTH_PORT):
         self.port = port
         self.health_port = health_port
-        self.device_client = DeviceConfigClient()
+        self.device_client = device_client
         self.switchos_client = SwitchOSClient()
         self.metrics = {}
         self.last_collection_time = 0
@@ -507,6 +512,37 @@ class SwitchOSExporter:
         except KeyboardInterrupt:
             logger.info("Shutting down exporter")
 
+def main():
+    parser = argparse.ArgumentParser(
+        description="MikroTik SwitchOS Prometheus exporter",
+        epilog="Example: python3 switchos_exporter.py --port 9080 my_custom_devices.yaml",
+    )
+    parser.add_argument(
+        "config", nargs="?", default=None,
+        help="Path to the YAML config file "
+             "(default: devices.yaml, or $SWITCHOS_CONFIG)",
+    )
+    parser.add_argument(
+        "--port", type=int, default=None,
+        help=f"Metrics port. Overrides the 'port' setting in the config file "
+             f"(default: {DEFAULT_PORT})",
+    )
+    parser.add_argument(
+        "--collection-interval", type=int, default=60,
+        help="Seconds between collection cycles (default: 60)",
+    )
+    args = parser.parse_args()
+
+    try:
+        device_client = DeviceConfigClient(args.config)
+        # Port precedence: --port > config file 'port' > default
+        port = args.port if args.port is not None else device_client.get_port(DEFAULT_PORT)
+    except ValueError as e:
+        parser.error(str(e))
+
+    exporter = SwitchOSExporter(device_client, port=port)
+    exporter.run(collection_interval=args.collection_interval)
+
+
 if __name__ == "__main__":
-    exporter = SwitchOSExporter(port=9000)
-    exporter.run(collection_interval=60)
+    main()

@@ -2,10 +2,14 @@
 #
 # All configuration lives in this single file. Copy it to devices.yaml and edit.
 #
+# `port`      - metrics port (optional, default 9000). The --port CLI flag
+#               overrides this.
 # `defaults`  - applied to every device unless overridden per-device.
 # `devices`   - the switches to scrape. Only `name` and `ip` are required;
 #               `user`, `password`, `device_model` and `manufacturer` fall back
 #               to `defaults`.
+
+port: 9000
 
 defaults:
   user: admin
