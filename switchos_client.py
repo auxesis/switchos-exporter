@@ -141,6 +141,7 @@ class SwitchOSClient:
                 # Remap the ones we need to the canonical SwOS keys.
                 if 'i0a' in data and 'nm' not in data:
                     data = self._translate_swoslite_link(data)
+                    data['_swos_lite'] = True   # for OS-specific speed decoding
                 return data
             except Exception as e:
                 logger.error(f"Failed to parse link status response: {e}")
@@ -875,6 +876,8 @@ class SwitchOSClient:
         'i07': 'brd',   # board model
         'i0b': 'bld',   # firmware build timestamp
         'i22': 'temp',  # CPU temperature
+        'i15': 'psuv',  # PSU voltage (Health page, scale 100)
+        'i26': 'pwr',   # power consumption (Health page, scale 10)
     }
 
     @classmethod
@@ -1009,7 +1012,26 @@ class SwitchOSClient:
             elif isinstance(temp, str):
                 temp = int(temp.strip('"'), 16) if temp.strip('"').startswith('0x') else int(temp)
             sys_info['temperature_c'] = temp
-            
+
+            # PSU voltage: SwOS Lite (psuv, /100), SwOS CSS-series (volt, /10),
+            # SwOS CRS PSU1 (p1v, /100). Only emit when the device reports a value.
+            if 'psuv' in sys_data:
+                psu_v = self._hex_to_int(sys_data['psuv']) / 100.0
+            elif 'volt' in sys_data:
+                psu_v = self._hex_to_int(sys_data['volt']) / 10.0
+            elif 'p1v' in sys_data:
+                psu_v = self._hex_to_int(sys_data['p1v']) / 100.0
+            else:
+                psu_v = 0
+            if psu_v:
+                sys_info['psu_voltage_v'] = psu_v
+
+            # Total power consumption (SwOS Lite Health page, /10)
+            if 'pwr' in sys_data:
+                power_w = self._hex_to_int(sys_data['pwr']) / 10.0
+                if power_w:
+                    sys_info['power_consumption_w'] = power_w
+
             # Boolean flags
             bool_fields = {
                 'wdt': 'watchdog_enabled',
@@ -1075,6 +1097,14 @@ class SwitchOSClient:
         
         return metrics
     
+    # Speed code -> Mbps, from the firmware speed enums. Codes 0-3 are identical
+    # across SwOS and SwOS Lite (10M/100M/1G/10G); codes 4-6 differ by OS.
+    #   SwOS:      "10M 100M 1G 10G 5G 2.5G 40G"
+    #   SwOS Lite: "10M 100M 1G 10G 200M 2.5G 5G"
+    # Code 7 (and anything unmapped) means "no link" -> 0.
+    _SPEED_MAP_SWOS = {0: 10, 1: 100, 2: 1000, 3: 10000, 4: 5000, 5: 2500, 6: 40000}
+    _SPEED_MAP_SWOSLITE = {0: 10, 1: 100, 2: 1000, 3: 10000, 4: 200, 5: 2500, 6: 5000}
+
     def parse_link_metrics(self, link_data: Dict) -> Dict[str, Any]:
         """Parse link status data to extract port metrics"""
         metrics = {
@@ -1124,7 +1154,8 @@ class SwitchOSClient:
                 elif isinstance(speed, str) and speed.startswith('0x'):
                     speed = int(speed, 16)
                     
-                speed_map = {0: 0, 1: 10, 2: 100, 3: 1000, 7: 0}  # 7 = auto/unknown
+                speed_map = (self._SPEED_MAP_SWOSLITE if link_data.get('_swos_lite')
+                             else self._SPEED_MAP_SWOS)
                 speed_mbps = speed_map.get(speed, 0)
                 
                 if port_enabled:

@@ -45,6 +45,28 @@ def test_swoslite_stats_decoded_64bit():
     assert max(s["rx_bytes_total"] for s in stats) > 1_000_000_000
 
 
+def test_port_speed_10g_decoded():
+    """10G SFP+ links report 10000 Mbps. The firmware speed enum is 0-indexed
+    (10M/100M/1G/10G), fixing the old off-by-one map that reported 10G as 1G."""
+    core = {p["name"]: p["speed_mbps"] for p in collect("swos_crs309")["port_details"]}
+    assert core["router"] == 10000        # 10G SFP+ (was wrongly 1000)
+    assert core["switch0"] == 1000        # 1G
+    poe = {p["name"]: p["speed_mbps"] for p in collect("swoslite_css610")["port_details"]}
+    assert poe["uplink"] == 10000         # 10G (was wrongly 1000)
+    assert poe["Port5"] == 1000           # 1G (was wrongly 100)
+    assert poe["Port1"] == 100            # 100M (was wrongly 10)
+    css = {p["name"]: p["speed_mbps"] for p in collect("swos_css106")["port_details"]}
+    assert css["router"] == 1000          # 1G (was wrongly 100)
+
+
+def test_speed_maps_agree_on_common_codes():
+    """SwOS and SwOS Lite share speed codes 0-3 (and 5); only 4/6 differ."""
+    from switchos_client import SwitchOSClient as C
+    for code, mbps in {0: 10, 1: 100, 2: 1000, 3: 10000, 5: 2500}.items():
+        assert C._SPEED_MAP_SWOS[code] == mbps
+        assert C._SPEED_MAP_SWOSLITE[code] == mbps
+
+
 def test_swoslite_sfp_decoded():
     """CSS610 sfp.b (obfuscated) yields the module identity; the 16-bit -128
     temperature sentinel on its copper DAC is skipped, not emitted as garbage."""

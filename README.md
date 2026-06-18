@@ -33,6 +33,8 @@ The exporter consists of three main components:
 - `switchos_collection_duration_seconds`: Time spent collecting metrics
 - `switchos_system_uptime_seconds`: System uptime
 - `switchos_system_temperature_celsius`: System temperature
+- `switchos_psu_voltage_volts`: Power supply input voltage (where reported)
+- `switchos_power_consumption_watts`: Total switch power draw (SwOS Lite)
 
 ### Port Metrics
 - `switchos_port_status`: Port enabled status (1=enabled, 0=disabled)
@@ -54,15 +56,27 @@ The exporter consists of three main components:
 - `switchos_mac_table_entries_by_vlan`: MAC entries per VLAN
 
 ### SFP Module Metrics
-- `switchos_sfp_temperature_celsius`: SFP module temperature
+- `switchos_sfp_temperature_celsius`: SFP module temperature (optical modules)
+- `switchos_sfp_voltage_volts`: SFP module supply voltage (optical modules)
 - `switchos_sfp_tx_power_mw`: SFP TX power in milliwatts
 - `switchos_sfp_rx_power_mw`: SFP RX power in milliwatts
 
 ### PoE Metrics (PoE-out switches: CSS106-xP, CSS610-xP, …)
-- `switchos_poe_status`: PoE-out port status code (0=off, >0=enabled/delivering)
+- `switchos_poe_status`: PoE-out port status code (see table below)
 - `switchos_poe_current_milliamps`: PoE-out current draw in mA
 - `switchos_poe_power_watts`: PoE-out power delivered in watts
 - `switchos_poe_voltage_volts`: PoE-out voltage (SwOS Lite devices only)
+
+`switchos_poe_status` values:
+
+| Code | Meaning | Code | Meaning |
+|------|---------|------|---------|
+| 0 | off | 6 | voltage too low |
+| 1 | disabled | 7 | current too low |
+| 2 | waiting for load | 8 | power cycle |
+| 3 | powered on | 9 | voltage too high |
+| 4 | overload | 10 | controller error |
+| 5 | short circuit | | |
 
 ### Device Information
 - `switchos_device_info`: Device metadata (version, model, serial, etc.)

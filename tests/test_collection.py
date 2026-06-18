@@ -18,6 +18,7 @@ EXPECTED = {
         "names": ["router", "Port2", "Port3", "ceiling", "kitchen", "SFP"],
         "mac_entries": 57, "sfp": 0, "poe": 4, "poe_voltage": False,
         "version": "2.18", "board": "CSS106-1G-4P-1S", "temp": 41,
+        "psu_v": 25.1, "power_w": None, "sfp_volt": None,
     },
     "swos_crs309": {
         "ports": 9, "linked": 4,
@@ -25,6 +26,7 @@ EXPECTED = {
                   "SFP7", "poe0", "MGMT"],
         "mac_entries": 61, "sfp": 4, "poe": 0, "poe_voltage": False,
         "version": "2.18", "board": "CRS309-1G-8S+", "temp": 33,
+        "psu_v": None, "power_w": None, "sfp_volt": 3.279,
     },
     "swoslite_css610": {
         "ports": 10, "linked": 6,
@@ -32,6 +34,7 @@ EXPECTED = {
                   "Port8", "uplink", "SFP+2"],
         "mac_entries": 58, "sfp": 1, "poe": 8, "poe_voltage": True,
         "version": "2.21", "board": "CSS610-8P-2S+", "temp": 44,
+        "psu_v": 28.18, "power_w": 27.6, "sfp_volt": None,
     },
 }
 
@@ -75,6 +78,9 @@ def test_system_info(device_case):
     assert si["temperature_c"] == exp["temp"]
     assert si["uptime_seconds"] > 0
     assert isinstance(si["build_timestamp"], int) and si["build_timestamp"] > 0
+    # PSU voltage / power consumption (only where the device reports them)
+    assert si.get("psu_voltage_v") == exp["psu_v"]
+    assert si.get("power_consumption_w") == exp["power_w"]
 
 
 def test_mac_table(device_case):
@@ -84,7 +90,14 @@ def test_mac_table(device_case):
 
 def test_sfp_modules(device_case):
     name, info, m = device_case
-    assert len(m.get("sfp_modules", [])) == EXPECTED[name]["sfp"]
+    exp = EXPECTED[name]
+    sfp = m.get("sfp_modules", [])
+    assert len(sfp) == exp["sfp"]
+    # Optical modules report a supply voltage (~3.3 V); copper DACs report 0.
+    if exp["sfp_volt"]:
+        optical = [x for x in sfp if x["voltage_v"] > 0]
+        assert len(optical) == 1
+        assert optical[0]["voltage_v"] == exp["sfp_volt"]
 
 
 def test_poe(device_case):

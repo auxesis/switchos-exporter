@@ -72,7 +72,19 @@ class SwitchOSExporter:
             'System temperature in Celsius',
             ['device_name']
         )
-        
+
+        self.psu_voltage = Gauge(
+            'switchos_psu_voltage_volts',
+            'Power supply input voltage in volts',
+            ['device_name']
+        )
+
+        self.power_consumption = Gauge(
+            'switchos_power_consumption_watts',
+            'Total switch power consumption in watts',
+            ['device_name']
+        )
+
         # Port metrics
         self.port_status = Gauge(
             'switchos_port_status',
@@ -173,12 +185,21 @@ class SwitchOSExporter:
             'SFP module RX power in milliwatts',
             ['device_name', 'sfp_index', 'vendor', 'part_number']
         )
-        
+
+        self.sfp_voltage = Gauge(
+            'switchos_sfp_voltage_volts',
+            'SFP module supply voltage in volts',
+            ['device_name', 'sfp_index', 'vendor', 'part_number']
+        )
+
         # PoE metrics (PoE-out capable switches: CSS106-xP, CSS610-xP)
         poe_labels = ['device_name', 'port_name', 'port_index']
         self.poe_status = Gauge(
             'switchos_poe_status',
-            'PoE-out port status code (0=off; vendor-specific, >0=enabled/delivering)',
+            'PoE-out port status: 0=off, 1=disabled, 2=waiting for load, '
+            '3=powered on, 4=overload, 5=short circuit, 6=voltage too low, '
+            '7=current too low, 8=power cycle, 9=voltage too high, '
+            '10=controller error',
             poe_labels
         )
         self.poe_current = Gauge(
@@ -289,7 +310,17 @@ class SwitchOSExporter:
                 self.system_temperature.labels(
                     device_name=labels['device_name']
                 ).set(sys_info['temperature_c'])
-            
+
+            if 'psu_voltage_v' in sys_info:
+                self.psu_voltage.labels(
+                    device_name=labels['device_name']
+                ).set(sys_info['psu_voltage_v'])
+
+            if 'power_consumption_w' in sys_info:
+                self.power_consumption.labels(
+                    device_name=labels['device_name']
+                ).set(sys_info['power_consumption_w'])
+
             # Device info
             info_data = {
                 'version': sys_info.get('version', 'Unknown'),
@@ -381,6 +412,8 @@ class SwitchOSExporter:
                     self.sfp_tx_power.labels(**sfp_labels).set(sfp['tx_power_mw'])
                 if 'rx_power_mw' in sfp:
                     self.sfp_rx_power.labels(**sfp_labels).set(sfp['rx_power_mw'])
+                if 'voltage_v' in sfp:
+                    self.sfp_voltage.labels(**sfp_labels).set(sfp['voltage_v'])
 
         # PoE metrics
         if 'poe_ports' in metrics:
