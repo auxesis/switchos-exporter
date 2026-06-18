@@ -17,9 +17,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY *.py ./
 
-# Copy .env file if it exists (for standalone builds)
-COPY .env* ./
-
 # Create non-root user for security
 RUN useradd --create-home --shell /bin/bash exporter && \
     chown -R exporter:exporter /app

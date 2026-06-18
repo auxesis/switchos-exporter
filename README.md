@@ -1,19 +1,18 @@
 # MikroTik SwitchOS Prometheus Exporter
 
-A comprehensive Prometheus exporter for MikroTik switches running SwitchOS. This exporter discovers devices from Netbox API and collects detailed metrics including port status, SFP module information, VLAN configuration, MAC address tables, and system information.
+A comprehensive Prometheus exporter for MikroTik switches running SwitchOS. This exporter reads its device list from a YAML config file and collects detailed metrics including port status, SFP module information, VLAN configuration, MAC address tables, and system information.
 
 ![Grafana Dashboard](dashboard.png)
 
 ## Features
 
-- **Automatic Device Discovery**: Fetches MikroTik switches from Netbox API based on configurable filters
+- **Simple Device Inventory**: Lists MikroTik switches in a YAML config file — no external dependencies
 - **Comprehensive Metrics Collection**: 
   - Device status and system information
   - Port status, link state, and statistics
   - SFP module temperature and optical power levels
   - VLAN configuration and membership
   - MAC address table entries
-- **Multi-site Support**: Includes site labels for monitoring across multiple locations
 - **HTTP Digest Authentication**: Secure authentication with SwitchOS devices
 - **Prometheus Compatible**: Standard Prometheus metrics format with proper label sanitization
 
@@ -21,7 +20,7 @@ A comprehensive Prometheus exporter for MikroTik switches running SwitchOS. This
 
 The exporter consists of three main components:
 
-1. **Netbox Client** (`netbox_client.py`): Discovers MikroTik switches from Netbox API
+1. **Device Config Client** (`device_config.py`): Loads the switch inventory from a YAML config file
 2. **SwitchOS Client** (`switchos_client.py`): Communicates with switches and parses metrics
 3. **Prometheus Exporter** (`switchos_exporter.py`): Exposes metrics in Prometheus format
 
@@ -62,29 +61,51 @@ The exporter consists of three main components:
 
 ## Configuration
 
-Create a `.env` file with the following configuration:
+All configuration lives in a single `devices.yaml` file. Copy
+`devices.yaml.example` to `devices.yaml` and edit it. The file has two sections:
 
-```bash
-# SwitchOS Authentication
-user=admin
-password=your_switch_password
+- `defaults` — applied to every device unless overridden per-device.
+- `devices` — the switches to scrape. Only `name` and `ip` are required.
 
-# Netbox Configuration
-netbox_api_token=your_netbox_api_token_here
-netbox_api_url=http://your-netbox-server:8000/api/
+```yaml
+defaults:
+  user: admin
+  password: your_switch_password
 
-# Netbox Device Filters
-netbox_manufacturer=MikroTik
-netbox_platform=SwitchOS
-netbox_tags=Monitoring
+devices:
+  # Minimal entry — uses the credentials from `defaults`
+  - name: switch-001
+    ip: 192.168.1.1
+
+  # Entry with optional labels
+  - name: switch-002
+    ip: 192.168.1.2
+    device_model: CRS328-24P-20S-RM
+    manufacturer: MikroTik
+
+  # Entry with per-device credential override
+  - name: switch-003
+    ip: 192.168.1.3
+    user: monitor
+    password: a-different-password
 ```
+
+| Field | Required | Default | Notes |
+|-------|----------|---------|-------|
+| `name` | yes | — | Device name (`device_name` label) |
+| `ip` | yes | — | IPv4 address; CIDR suffix (e.g. `/24`) is stripped |
+| `user`, `password` | yes (here or in `defaults`) | from `defaults` | SwitchOS digest-auth credentials |
+| `device_model`, `manufacturer` | no | from `defaults`, else `Unknown` | Prometheus labels (on `switchos_device_up`) |
+
+The config file defaults to `devices.yaml` in the working directory; override the
+path with the `SWITCHOS_CONFIG` environment variable.
 
 ## Installation and Deployment
 
 ### Prerequisites
 
 - Python 3.10+ or Docker
-- Network access to Netbox API and MikroTik switches
+- Network access to the MikroTik switches
 - MikroTik switches with SwitchOS and HTTP API enabled
 
 ### Method 1: Direct Python Deployment
@@ -94,10 +115,10 @@ netbox_tags=Monitoring
    pip install -r requirements.txt
    ```
 
-2. **Configure Environment**:
+2. **Configure**:
    ```bash
-   cp .env.example .env
-   # Edit .env with your credentials and Netbox configuration
+   cp devices.yaml.example devices.yaml
+   # Edit devices.yaml with your credentials and switches
    ```
 
 3. **Run the Exporter**:
@@ -112,10 +133,10 @@ netbox_tags=Monitoring
 
 ### Method 2: Docker Deployment
 
-1. **Configure Environment**:
+1. **Configure**:
    ```bash
-   cp .env.example .env
-   # Edit .env with your credentials and Netbox configuration
+   cp devices.yaml.example devices.yaml
+   # Edit devices.yaml with your credentials and switches
    ```
 
 2. **Build and Deploy**:
@@ -199,9 +220,9 @@ topk(10, rate(switchos_port_rx_bytes_total[5m]) * 8 / 1000000)
 switchos_sfp_temperature_celsius
 ```
 
-**Site-based Filtering**:
+**Per-device Filtering**:
 ```promql
-rate(switchos_port_rx_bytes_total{site="000001"}[5m]) * 8 / 1000000
+rate(switchos_port_rx_bytes_total{device_name="switch-001"}[5m]) * 8 / 1000000
 ```
 
 ### Sample Alerts
@@ -232,9 +253,10 @@ groups:
 ### Common Issues
 
 1. **Device shows as down**: Check network connectivity and credentials
-2. **No metrics appearing**: Verify Netbox filters match your device configuration
+2. **No metrics appearing**: Verify the `ip` values in `devices.yaml` are reachable
 3. **Authentication errors**: Confirm SwitchOS credentials and HTTP API access
 4. **Label errors**: Ensure device names don't contain invalid characters
+5. **`Config file not found`**: Ensure `devices.yaml` exists in the working directory, or set `SWITCHOS_CONFIG` to its path
 
 ### Debugging
 
@@ -248,9 +270,9 @@ groups:
    curl -u admin:password http://switch-ip/link.b
    ```
 
-3. **Verify Netbox API**:
+3. **Verify the device inventory loads**:
    ```bash
-   curl -H "Authorization: Token your-token" http://netbox-url/api/dcim/devices/
+   python3 device_config.py
    ```
 
 ### Performance Tuning
@@ -265,12 +287,12 @@ groups:
 ```
 switchos-exporter/
 ├── switchos_exporter.py    # Main exporter application
-├── netbox_client.py        # Netbox API client
+├── device_config.py        # YAML device inventory loader
 ├── switchos_client.py      # SwitchOS communication
 ├── requirements.txt        # Python dependencies
 ├── Dockerfile             # Container definition
 ├── docker-compose.yml     # Docker deployment
-├── .env.example          # Configuration template
+├── devices.yaml.example  # Configuration template (defaults + devices)
 └── README.md            # This file
 ```
 

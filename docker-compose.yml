@@ -25,7 +25,7 @@ services:
       start_period: 120s  # Allow 2 minutes for initial collection
     volumes:
       - ./logs:/app/logs:rw
-      - ./.env:/app/.env:ro  # Mount .env file for configuration
+      - ./devices.yaml:/app/devices.yaml:ro  # Mount the full configuration
     logging:
       driver: "json-file"
       options:

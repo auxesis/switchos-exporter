@@ -1,0 +1,29 @@
+# SwitchOS Exporter configuration
+#
+# All configuration lives in this single file. Copy it to devices.yaml and edit.
+#
+# `defaults`  - applied to every device unless overridden per-device.
+# `devices`   - the switches to scrape. Only `name` and `ip` are required;
+#               `user`, `password`, `device_model` and `manufacturer` fall back
+#               to `defaults`.
+
+defaults:
+  user: admin
+  password: your_switch_password
+
+devices:
+  # Minimal entry — uses the credentials from `defaults`
+  - name: switch-001
+    ip: 192.168.1.1
+
+  # Entry with optional labels
+  - name: switch-002
+    ip: 192.168.1.2
+    device_model: CRS328-24P-20S-RM
+    manufacturer: MikroTik
+
+  # Entry with per-device credential override
+  - name: switch-003
+    ip: 192.168.1.3
+    user: monitor
+    password: a-different-password

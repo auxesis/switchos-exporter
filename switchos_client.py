@@ -1,19 +1,18 @@
-import os
 import requests
 from requests.auth import HTTPDigestAuth
 from typing import Dict, Optional, Any, Union, List
 import logging
 import time
-from dotenv import load_dotenv
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class SwitchOSClient:
     def __init__(self):
-        load_dotenv()
-        self.username = os.getenv('user', 'admin')
-        self.password = os.getenv('password', '')
+        # Credentials are supplied per-device (resolved from the YAML config)
+        # and set on each call to collect_metrics().
+        self.active_username = ''
+        self.active_password = ''
         self.timeout = 30
         self.retry_count = 3
         self.retry_delay = 2
@@ -65,7 +64,7 @@ class SwitchOSClient:
         
     def _make_request(self, method: str, url: str, **kwargs) -> Optional[requests.Response]:
         """Make HTTP request with retry logic and error handling"""
-        auth = HTTPDigestAuth(self.username, self.password)
+        auth = HTTPDigestAuth(self.active_username, self.active_password)
         kwargs.setdefault('timeout', self.timeout)
         kwargs['auth'] = auth
         
@@ -273,17 +272,25 @@ class SwitchOSClient:
         
         response = self._make_request('GET', url, headers=headers)
         if response:
+            # Some switch models don't serve port stats and return an empty body
+            # or the HTML web UI instead of the expected `{...}` object notation.
+            # Treat anything that isn't the stats payload as "no stats available".
+            body = response.text.strip()
+            if not body.startswith('{'):
+                logger.debug(f"No port stats available from {device_ip} "
+                             f"(unexpected response, {len(body)} bytes)")
+                return {}
             try:
                 # Parse the JavaScript object notation
                 import re
                 import json
-                
+
                 # Add quotes around keys
                 json_text = re.sub(r'([{,])([a-zA-Z_]\w*):', r'\1"\2":', response.text)
-                
+
                 # Add quotes around hex values
                 json_text = re.sub(r'([:, \[])?(0x[0-9a-fA-F]+)([,\]}])', r'\1"\2"\3', json_text)
-                
+
                 # Parse the fixed JSON
                 return json.loads(json_text)
             except Exception as e:
@@ -991,8 +998,13 @@ class SwitchOSClient:
             # Get port speeds
             port_speeds = link_data.get('spd', [])
             
-            # Total ports from prt field
-            total_ports = int(link_data.get('prt', '0x0'), 16)
+            # Total ports from the `prt` field (CRS-style switches). CSS-style
+            # switches omit `prt`, so fall back to the number of port names.
+            prt = link_data.get('prt')
+            if prt is not None:
+                total_ports = int(prt, 16) if isinstance(prt, str) else int(prt)
+            else:
+                total_ports = len(port_names)
             metrics['ports']['total'] = total_ports
             
             # Process each port
@@ -1042,14 +1054,13 @@ class SwitchOSClient:
     
     def collect_metrics(self, device_ip: str, device_info: Dict[str, Any]) -> Dict[str, Any]:
         """Collect all metrics from a device"""
+        # Credentials are resolved per-device by the config loader
+        self.active_username = device_info.get('user', '')
+        self.active_password = device_info.get('password', '')
+
         metrics = {
             'device_name': device_info.get('name', 'Unknown'),
             'device_ip': device_ip,
-            'site': device_info.get('site', 'Unknown'),
-            'site_id': device_info.get('site_id', 'unknown'),
-            'site_description': device_info.get('site_description', ''),
-            'location': device_info.get('location', ''),
-            'device_role': device_info.get('device_role', 'Unknown'),
             'device_model': device_info.get('device_model', 'Unknown'),
             'manufacturer': device_info.get('manufacturer', 'Unknown'),
             'up': 0,
@@ -1100,27 +1111,31 @@ class SwitchOSClient:
                 metrics.update(sys_metrics)
         else:
             logger.error(f"Cannot connect to {device_info.get('name', 'Unknown')} ({device_ip})")
-        
+
+        # Clear active credentials after polling this device
+        self.active_username = ''
+        self.active_password = ''
+
         return metrics
 
 
 if __name__ == "__main__":
-    # Test the SwitchOS client with the device from Netbox
-    from netbox_client import NetboxClient
-    
-    # Get devices from Netbox
-    netbox = NetboxClient()
-    devices = netbox.fetch_devices()
-    
+    # Test the SwitchOS client with devices from the config file
+    from device_config import DeviceConfigClient
+
+    # Get devices from the config file
+    device_client = DeviceConfigClient()
+    devices = device_client.fetch_devices()
+
     if not devices:
-        print("No devices found in Netbox")
+        print("No devices found in config file")
         exit(1)
     
     # Test SwitchOS connection
     switchos = SwitchOSClient()
     
     for device in devices:
-        print(f"\nTesting device: {device['name']} ({device['ip']}) at site {device['site_id']}")
+        print(f"\nTesting device: {device['name']} ({device['ip']})")
         metrics = switchos.collect_metrics(device['ip'], device)
         
         print(f"Device up: {'Yes' if metrics['up'] else 'No'}")
@@ -1255,9 +1270,6 @@ if __name__ == "__main__":
             if 'system_info' in metrics and metrics['system_info']:
                 sys_info = metrics['system_info']
                 print(f"\nSystem Information:")
-                print(f"  Site: {metrics.get('site', 'Unknown')} ({metrics.get('site_id', 'unknown')})")
-                if 'location' in metrics and metrics['location']:
-                    print(f"  Location: {metrics['location']}")
                 if 'device_id' in sys_info:
                     print(f"  Device: {sys_info['device_id']}")
                 if 'board_model' in sys_info:

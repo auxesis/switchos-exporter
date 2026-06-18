@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 MikroTik SwitchOS Prometheus Exporter
-Collects metrics from MikroTik switches discovered via Netbox
+Collects metrics from MikroTik switches listed in a YAML config file
 """
 
 import time
@@ -10,7 +10,7 @@ import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from typing import Dict, List, Any
 from prometheus_client import start_http_server, Gauge, Counter, Info, Enum, REGISTRY
-from netbox_client import NetboxClient
+from device_config import DeviceConfigClient
 from switchos_client import SwitchOSClient
 
 # Configure logging
@@ -24,7 +24,7 @@ class SwitchOSExporter:
     def __init__(self, port: int = 9000, health_port: int = 9001):
         self.port = port
         self.health_port = health_port
-        self.netbox_client = NetboxClient()
+        self.device_client = DeviceConfigClient()
         self.switchos_client = SwitchOSClient()
         self.metrics = {}
         self.last_collection_time = 0
@@ -47,134 +47,134 @@ class SwitchOSExporter:
         self.device_up = Gauge(
             'switchos_device_up',
             'Device reachability status (1=up, 0=down)',
-            ['device_name', 'site', 'site_id', 'location', 'device_model', 'manufacturer', 'device_role']
+            ['device_name', 'device_model', 'manufacturer']
         )
         
         self.collection_duration = Gauge(
             'switchos_collection_duration_seconds',
             'Time spent collecting metrics from device',
-            ['device_name', 'site', 'site_id', 'location']
+            ['device_name']
         )
         
         # System metrics
         self.system_uptime = Gauge(
             'switchos_system_uptime_seconds',
             'System uptime in seconds',
-            ['device_name', 'site', 'site_id', 'location', 'device_model', 'serial_id']
+            ['device_name', 'device_model', 'serial_id']
         )
         
         self.system_temperature = Gauge(
             'switchos_system_temperature_celsius',
             'System temperature in Celsius',
-            ['device_name', 'site', 'site_id', 'location']
+            ['device_name']
         )
         
         # Port metrics
         self.port_status = Gauge(
             'switchos_port_status',
             'Port status (1=enabled, 0=disabled)',
-            ['device_name', 'site', 'site_id', 'location', 'port_name', 'port_index']
+            ['device_name', 'port_name', 'port_index']
         )
         
         self.port_link_status = Gauge(
             'switchos_port_link_status',
             'Port link status (1=linked, 0=down)',
-            ['device_name', 'site', 'site_id', 'location', 'port_name', 'port_index']
+            ['device_name', 'port_name', 'port_index']
         )
         
         self.port_speed_mbps = Gauge(
             'switchos_port_speed_mbps',
             'Port speed in Mbps',
-            ['device_name', 'site', 'site_id', 'location', 'port_name', 'port_index']
+            ['device_name', 'port_name', 'port_index']
         )
         
         # Port statistics
         self.port_rx_bytes = Counter(
             'switchos_port_rx_bytes_total',
             'Total received bytes',
-            ['device_name', 'site', 'site_id', 'location', 'port_name', 'port_index']
+            ['device_name', 'port_name', 'port_index']
         )
         
         self.port_tx_bytes = Counter(
             'switchos_port_tx_bytes_total',
             'Total transmitted bytes',
-            ['device_name', 'site', 'site_id', 'location', 'port_name', 'port_index']
+            ['device_name', 'port_name', 'port_index']
         )
         
         self.port_rx_packets = Counter(
             'switchos_port_rx_packets_total',
             'Total received packets',
-            ['device_name', 'site', 'site_id', 'location', 'port_name', 'port_index']
+            ['device_name', 'port_name', 'port_index']
         )
         
         self.port_tx_packets = Counter(
             'switchos_port_tx_packets_total',
             'Total transmitted packets',
-            ['device_name', 'site', 'site_id', 'location', 'port_name', 'port_index']
+            ['device_name', 'port_name', 'port_index']
         )
         
         self.port_rx_errors = Counter(
             'switchos_port_rx_errors_total',
             'Total receive errors',
-            ['device_name', 'site', 'site_id', 'location', 'port_name', 'port_index']
+            ['device_name', 'port_name', 'port_index']
         )
         
         self.port_tx_errors = Counter(
             'switchos_port_tx_errors_total',
             'Total transmit errors',
-            ['device_name', 'site', 'site_id', 'location', 'port_name', 'port_index']
+            ['device_name', 'port_name', 'port_index']
         )
         
         # VLAN metrics
         self.vlan_count = Gauge(
             'switchos_vlan_count',
             'Number of configured VLANs',
-            ['device_name', 'site', 'site_id', 'location']
+            ['device_name']
         )
         
         self.vlan_ports = Gauge(
             'switchos_vlan_port_members',
             'Number of member ports in VLAN',
-            ['device_name', 'site', 'site_id', 'location', 'vlan_id']
+            ['device_name', 'vlan_id']
         )
         
         # MAC table metrics
         self.mac_table_entries = Gauge(
             'switchos_mac_table_entries',
             'Number of MAC address table entries',
-            ['device_name', 'site', 'site_id', 'location']
+            ['device_name']
         )
         
         self.mac_table_entries_by_vlan = Gauge(
             'switchos_mac_table_entries_by_vlan',
             'MAC address table entries per VLAN',
-            ['device_name', 'site', 'site_id', 'location', 'vlan_id']
+            ['device_name', 'vlan_id']
         )
         
         # SFP metrics
         self.sfp_temperature = Gauge(
             'switchos_sfp_temperature_celsius',
             'SFP module temperature in Celsius',
-            ['device_name', 'site', 'site_id', 'location', 'sfp_index', 'vendor', 'part_number']
+            ['device_name', 'sfp_index', 'vendor', 'part_number']
         )
         
         self.sfp_tx_power = Gauge(
             'switchos_sfp_tx_power_mw',
             'SFP module TX power in milliwatts',
-            ['device_name', 'site', 'site_id', 'location', 'sfp_index', 'vendor', 'part_number']
+            ['device_name', 'sfp_index', 'vendor', 'part_number']
         )
         
         self.sfp_rx_power = Gauge(
             'switchos_sfp_rx_power_mw',
             'SFP module RX power in milliwatts',
-            ['device_name', 'site', 'site_id', 'location', 'sfp_index', 'vendor', 'part_number']
+            ['device_name', 'sfp_index', 'vendor', 'part_number']
         )
         
         # Info metrics
         self.device_info = Info(
             'switchos_device_info',
             'Device information',
-            ['device_name', 'site', 'site_id', 'location']
+            ['device_name']
         )
 
         # Exporter health metrics
@@ -197,44 +197,34 @@ class SwitchOSExporter:
         """Collect metrics from a single device"""
         device_name = self.sanitize_label(device['name'])
         device_ip = device['ip']
-        site = self.sanitize_label(device['site'])
-        site_id = self.sanitize_label(device['site_id'])
-        location = self.sanitize_label(device['location'])
-        
-        logger.info(f"Collecting metrics from {device_name} ({device_ip}) at site {site_id}")
-        
+
+        logger.info(f"Collecting metrics from {device_name} ({device_ip})")
+
         start_time = time.time()
-        
+
         try:
             # Collect all metrics from device
             metrics = self.switchos_client.collect_metrics(device_ip, device)
-            
+
             # Common labels (sanitize all for Prometheus)
             labels = {
                 'device_name': device_name,
-                'site': site,
-                'site_id': site_id,
-                'location': location,
                 'device_model': self.sanitize_label(device.get('device_model', 'Unknown')),
-                'manufacturer': self.sanitize_label(device.get('manufacturer', 'Unknown')),
-                'device_role': self.sanitize_label(device.get('device_role', 'Unknown'))
+                'manufacturer': self.sanitize_label(device.get('manufacturer', 'Unknown'))
             }
-            
+
             # Device status
             self.device_up.labels(**labels).set(metrics['up'])
-            
+
             # Collection duration
             duration = time.time() - start_time
             self.collection_duration.labels(
-                device_name=device_name,
-                site=site,
-                site_id=site_id,
-                location=location
+                device_name=device_name
             ).set(duration)
-            
+
             if metrics['up']:
                 self.update_device_metrics(metrics, labels)
-                
+
         except Exception as e:
             logger.error(f"Error collecting metrics from {device_name}: {e}")
             import traceback
@@ -243,12 +233,8 @@ class SwitchOSExporter:
                 # Use minimal labels for error case
                 minimal_labels = {
                     'device_name': self.sanitize_label(device.get('name', 'Unknown')),
-                    'site': self.sanitize_label(device.get('site', 'Unknown')),
-                    'site_id': self.sanitize_label(device.get('site_id', 'unknown')),
-                    'location': self.sanitize_label(device.get('location', 'Unknown')),
                     'device_model': self.sanitize_label(device.get('device_model', 'Unknown')),
-                    'manufacturer': self.sanitize_label(device.get('manufacturer', 'Unknown')),
-                    'device_role': self.sanitize_label(device.get('device_role', 'Unknown'))
+                    'manufacturer': self.sanitize_label(device.get('manufacturer', 'Unknown'))
                 }
                 self.device_up.labels(**minimal_labels).set(0)
             except Exception as label_error:
@@ -263,24 +249,18 @@ class SwitchOSExporter:
             
             if 'uptime_seconds' in sys_info:
                 try:
-                    # system_uptime needs: device_name, site, site_id, location, device_model, serial_id
+                    # system_uptime needs: device_name, device_model, serial_id
                     self.system_uptime.labels(
                         device_name=labels['device_name'],
-                        site=labels['site'],
-                        site_id=labels['site_id'],
-                        location=labels['location'],
                         device_model=labels['device_model'],
                         serial_id=self.sanitize_label(sys_info.get('serial_id', 'Unknown'))
                     ).set(sys_info['uptime_seconds'])
                 except Exception as e:
                     logger.error(f"Error setting system uptime metric: {e}")
-            
+
             if 'temperature_c' in sys_info:
                 self.system_temperature.labels(
-                    device_name=labels['device_name'],
-                    site=labels['site'],
-                    site_id=labels['site_id'],
-                    location=labels['location']
+                    device_name=labels['device_name']
                 ).set(sys_info['temperature_c'])
             
             # Device info
@@ -292,20 +272,14 @@ class SwitchOSExporter:
                 'build_date': sys_info.get('build_date', 'Unknown')
             }
             self.device_info.labels(
-                device_name=labels['device_name'],
-                site=labels['site'],
-                site_id=labels['site_id'],
-                location=labels['location']
+                device_name=labels['device_name']
             ).info(info_data)
-        
+
         # Port metrics
         if 'port_details' in metrics:
             for port in metrics['port_details']:
                 port_labels = {
                     'device_name': labels['device_name'],
-                    'site': labels['site'],
-                    'site_id': labels['site_id'],
-                    'location': labels['location'],
                     'port_name': self.sanitize_label(port['name']),
                     'port_index': str(port['index'])
                 }
@@ -319,9 +293,6 @@ class SwitchOSExporter:
             for port_stat in metrics['port_stats']:
                 port_labels = {
                     'device_name': labels['device_name'],
-                    'site': labels['site'],
-                    'site_id': labels['site_id'],
-                    'location': labels['location'],
                     'port_name': self.sanitize_label(port_stat['port_name']),
                     'port_index': str(port_stat['port_index'])
                 }
@@ -344,18 +315,12 @@ class SwitchOSExporter:
         if 'vlan_table' in metrics:
             vlan_count = len(metrics['vlan_table'])
             self.vlan_count.labels(
-                device_name=labels['device_name'],
-                site=labels['site'],
-                site_id=labels['site_id'],
-                location=labels['location']
+                device_name=labels['device_name']
             ).set(vlan_count)
-            
+
             for vlan in metrics['vlan_table']:
                 self.vlan_ports.labels(
                     device_name=labels['device_name'],
-                    site=labels['site'],
-                    site_id=labels['site_id'],
-                    location=labels['location'],
                     vlan_id=str(vlan['vlan_id'])
                 ).set(vlan['member_count'])
         
@@ -364,18 +329,12 @@ class SwitchOSExporter:
             mac_stats = metrics['mac_stats']
             
             self.mac_table_entries.labels(
-                device_name=labels['device_name'],
-                site=labels['site'],
-                site_id=labels['site_id'],
-                location=labels['location']
+                device_name=labels['device_name']
             ).set(mac_stats['total_entries'])
-            
+
             for vlan_id, count in mac_stats.get('entries_by_vlan', {}).items():
                 self.mac_table_entries_by_vlan.labels(
                     device_name=labels['device_name'],
-                    site=labels['site'],
-                    site_id=labels['site_id'],
-                    location=labels['location'],
                     vlan_id=str(vlan_id)
                 ).set(count)
         
@@ -384,9 +343,6 @@ class SwitchOSExporter:
             for sfp in metrics['sfp_modules']:
                 sfp_labels = {
                     'device_name': labels['device_name'],
-                    'site': labels['site'],
-                    'site_id': labels['site_id'],
-                    'location': labels['location'],
                     'sfp_index': str(sfp['index']),
                     'vendor': self.sanitize_label(sfp.get('vendor', 'Unknown')),
                     'part_number': self.sanitize_label(sfp.get('part_number', 'Unknown'))
@@ -405,8 +361,8 @@ class SwitchOSExporter:
         devices_count = 0
 
         try:
-            # Get devices from Netbox
-            devices = self.netbox_client.fetch_devices()
+            # Get devices from the config file
+            devices = self.device_client.fetch_devices()
             logger.info(f"Found {len(devices)} devices to monitor")
 
             # Collect metrics from each device
