@@ -4,8 +4,7 @@ services:
     container_name: switchos-exporter
     restart: unless-stopped
     ports:
-      - "9000:9000"
-      - "9001:9001"  # Health check port
+      - "9000:9000"  # Metrics and health (/metrics, /health)
     environment:
       - PYTHONUNBUFFERED=1
     deploy:
@@ -18,7 +17,7 @@ services:
           memory: 256M     # Reserve 256MB memory
     healthcheck:
       # Check health endpoint - returns 503 if collection is stale
-      test: ["CMD", "curl", "-f", "http://localhost:9001/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:9000/health"]
       interval: 30s
       timeout: 10s
       retries: 3

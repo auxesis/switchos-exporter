@@ -22,12 +22,12 @@ RUN useradd --create-home --shell /bin/bash exporter && \
     chown -R exporter:exporter /app
 USER exporter
 
-# Expose Prometheus metrics port and health check port
-EXPOSE 9000 9001
+# Expose Prometheus metrics + health port
+EXPOSE 9000
 
 # Health check - verifies collection is happening, not just HTTP server is up
 HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
-    CMD curl -f http://localhost:9001/health || exit 1
+    CMD curl -f http://localhost:9000/health || exit 1
 
 # Run the SwitchOS exporter
 CMD ["python3", "switchos_exporter.py"]

@@ -8,14 +8,15 @@ import time
 import logging
 import argparse
 import threading
-from http.server import HTTPServer, BaseHTTPRequestHandler
+from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from typing import Dict, List, Any
-from prometheus_client import start_http_server, Gauge, Counter, Info, Enum, REGISTRY
+from prometheus_client import (
+    Gauge, Counter, Info, Enum, REGISTRY, generate_latest, CONTENT_TYPE_LATEST,
+)
 from device_config import DeviceConfigClient
 from switchos_client import SwitchOSClient
 
 DEFAULT_PORT = 9000
-DEFAULT_HEALTH_PORT = 9001
 
 # Configure logging
 logging.basicConfig(
@@ -25,10 +26,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 class SwitchOSExporter:
-    def __init__(self, device_client: DeviceConfigClient,
-                 port: int = DEFAULT_PORT, health_port: int = DEFAULT_HEALTH_PORT):
+    def __init__(self, device_client: DeviceConfigClient, port: int = DEFAULT_PORT):
         self.port = port
-        self.health_port = health_port
         self.device_client = device_client
         self.switchos_client = SwitchOSClient()
         self.metrics = {}
@@ -457,60 +456,54 @@ class SwitchOSExporter:
 
         return time_since_collection < max_allowed and self.last_collection_success
 
-    def start_health_server(self):
-        """Start a simple HTTP server for health checks"""
+    def _make_handler(self):
+        """Build a request handler serving /metrics and /health on one port."""
         exporter = self
 
-        class HealthHandler(BaseHTTPRequestHandler):
+        class Handler(BaseHTTPRequestHandler):
             def log_message(self, format, *args):
                 pass  # Suppress access logs
 
             def do_GET(self):
-                if self.path == '/health' or self.path == '/healthz':
-                    if exporter.is_healthy():
-                        self.send_response(200)
-                        self.send_header('Content-Type', 'text/plain')
-                        self.end_headers()
-                        msg = f"OK - last collection {int(time.time() - exporter.last_collection_time)}s ago\n"
-                        self.wfile.write(msg.encode())
+                if self.path in ('/metrics', '/'):
+                    output = generate_latest(REGISTRY)
+                    self.send_response(200)
+                    self.send_header('Content-Type', CONTENT_TYPE_LATEST)
+                    self.end_headers()
+                    self.wfile.write(output)
+                elif self.path in ('/health', '/healthz'):
+                    healthy = exporter.is_healthy()
+                    if exporter.last_collection_time == 0:
+                        body = "OK - starting up\n"
                     else:
-                        self.send_response(503)
-                        self.send_header('Content-Type', 'text/plain')
-                        self.end_headers()
-                        msg = f"UNHEALTHY - last collection {int(time.time() - exporter.last_collection_time)}s ago\n"
-                        self.wfile.write(msg.encode())
+                        age = int(time.time() - exporter.last_collection_time)
+                        state = 'OK' if healthy else 'UNHEALTHY'
+                        body = f"{state} - last collection {age}s ago\n"
+                    self.send_response(200 if healthy else 503)
+                    self.send_header('Content-Type', 'text/plain')
+                    self.end_headers()
+                    self.wfile.write(body.encode())
                 else:
                     self.send_response(404)
                     self.end_headers()
 
-        def run_health_server():
-            server = HTTPServer(('0.0.0.0', self.health_port), HealthHandler)
-            server.serve_forever()
+        return Handler
 
-        health_thread = threading.Thread(target=run_health_server, daemon=True)
-        health_thread.start()
-        logger.info(f"Health check server started on http://0.0.0.0:{self.health_port}/health")
-    
     def run(self, collection_interval: int = 60):
         """Run the exporter"""
         logger.info(f"Starting SwitchOS Prometheus Exporter on port {self.port}")
 
-        # Start health check server
-        self.start_health_server()
-
         # Start metrics collection
         self.start_collection_loop(collection_interval)
 
-        # Start HTTP server
-        start_http_server(self.port)
-        logger.info(f"Prometheus metrics server started on http://0.0.0.0:{self.port}/metrics")
-        
-        # Keep the main thread alive
+        # Serve /metrics and /health on a single port
+        server = ThreadingHTTPServer(('0.0.0.0', self.port), self._make_handler())
+        logger.info(f"Serving /metrics and /health on http://0.0.0.0:{self.port}")
         try:
-            while True:
-                time.sleep(1)
+            server.serve_forever()
         except KeyboardInterrupt:
             logger.info("Shutting down exporter")
+            server.shutdown()
 
 def main():
     parser = argparse.ArgumentParser(
