@@ -889,7 +889,15 @@ class SwitchOSClient:
                     data = self._translate_swoslite_sys(data)
 
                 # Decode all hex values automatically
-                return self._decode_hex_value(data)
+                decoded = self._decode_hex_value(data)
+
+                # MAC fields are raw hex octets, not hex-encoded text. Keep the
+                # original hex so parse_system_info can colon-format it; decoding
+                # would turn e.g. 'f41e57c6d888' into mojibake.
+                for k in ('mac', 'rmac'):
+                    if isinstance(data.get(k), str):
+                        decoded[k] = data[k]
+                return decoded
             except Exception as e:
                 logger.error(f"Failed to parse system info response: {e}")
                 return {}
