@@ -2,7 +2,7 @@
 
 SwOS Lite (CSS610) serves the same data as SwOS but with obfuscated field
 names. These tests assert the exporter produces the same metric families for
-both firmware types, and pin the one known remaining gap so it is visible.
+both firmware types.
 """
 import pytest
 
@@ -71,10 +71,8 @@ def test_poe_parity_for_poe_hardware():
     assert "poe" in families(collect("swoslite_css610"))  # SwOS Lite, poe.b
 
 
-@pytest.mark.xfail(strict=True,
-                   reason="SwOS Lite sfp.b (obfuscated) is not parsed yet; "
-                          "CSS610 SFP+ modules are not reported. Remove this "
-                          "marker when SwOS Lite SFP parsing lands.")
 def test_swoslite_reports_sfp_modules():
-    """The CSS610 has SFP+ ports and should report its modules like SwOS does."""
-    assert len(collect("swoslite_css610").get("sfp_modules", [])) > 0
+    """The CSS610 reports its SFP+ modules, at parity with SwOS."""
+    sfp = collect("swoslite_css610").get("sfp_modules", [])
+    assert len(sfp) > 0
+    assert sfp[0]["vendor"]  # vendor decoded from the obfuscated sfp.b

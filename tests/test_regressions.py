@@ -45,6 +45,17 @@ def test_swoslite_stats_decoded_64bit():
     assert max(s["rx_bytes_total"] for s in stats) > 1_000_000_000
 
 
+def test_swoslite_sfp_decoded():
+    """CSS610 sfp.b (obfuscated) yields the module identity; the 16-bit -128
+    temperature sentinel on its copper DAC is skipped, not emitted as garbage."""
+    sfp = collect("swoslite_css610")["sfp_modules"]
+    assert len(sfp) == 1
+    mod = sfp[0]
+    assert mod["vendor"] == "OEM"
+    assert mod["part_number"] == "CAB-10GSFP-P1M"
+    assert "temperature_c" not in mod        # copper DAC: 0xff80 sentinel skipped
+
+
 def test_swoslite_device_info_populated():
     """CSS610 sys.b (obfuscated) populates device info instead of Unknown."""
     si = collect("swoslite_css610")["system_info"]

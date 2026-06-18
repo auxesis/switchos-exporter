@@ -162,7 +162,27 @@ class SwitchOSClient:
             'spd': data.get('i08', []),
             'nm': data.get('i0a', []),
         }
-    
+
+    # SwOS Lite sfp.b obfuscated field name -> canonical SwOS key. Taken from
+    # the SwOS Lite web UI SFP page (swos-css610out-2.21.bin).
+    _SWOSLITE_SFP_MAP = {
+        'i01': 'vnd',   # Vendor
+        'i02': 'pnr',   # Part Number
+        'i04': 'ser',   # Serial
+        'i05': 'dat',   # Date
+        'i06': 'typ',   # Type
+        'i08': 'tmp',   # Temperature
+        'i09': 'vcc',   # Voltage
+        'i0b': 'tpw',   # Tx Power
+        'i0c': 'rpw',   # Rx Power
+    }
+
+    @classmethod
+    def _translate_swoslite_sfp(cls, data: Dict) -> Dict:
+        """Map SwOS Lite sfp.b obfuscated keys to canonical SwOS keys."""
+        return {canon: data[obf] for obf, canon in cls._SWOSLITE_SFP_MAP.items()
+                if obf in data}
+
     def get_sfp_status(self, device_ip: str) -> Optional[Dict]:
         """Get SFP module status from device"""
         url = f"http://{device_ip}/sfp.b"
@@ -190,7 +210,11 @@ class SwitchOSClient:
                 
                 # Parse the fixed JSON
                 data = json.loads(json_text)
-                
+
+                # SwOS Lite uses obfuscated sfp.b field names (i01..); translate.
+                if 'i01' in data and 'vnd' not in data:
+                    data = self._translate_swoslite_sfp(data)
+
                 # Decode all hex values automatically
                 return self._decode_hex_value(data)
             except Exception as e:
@@ -236,11 +260,14 @@ class SwitchOSClient:
                     if i < len(temperatures):
                         # SwOS reports temperature as a signed value in whole
                         # degrees C (no scaling; the web UI uses no scale factor).
-                        # -128 (0xffffff80) is the "no DDM diagnostics" sentinel,
-                        # e.g. for copper DAC modules - omit it rather than emit.
+                        # -128 is the "no DDM diagnostics" sentinel (copper DACs);
+                        # SwOS sends it as 32-bit (0xffffff80), SwOS Lite as 16-bit
+                        # (0xff80). Sign-extend either width and omit the sentinel.
                         temp_val = self._hex_to_int(temperatures[i])
-                        if temp_val >= 0x80000000:          # sign-extend 32-bit
+                        if temp_val >= 0x80000000:          # 32-bit signed
                             temp_val -= 0x100000000
+                        elif temp_val >= 0x8000:            # 16-bit signed
+                            temp_val -= 0x10000
                         if temp_val != -128:
                             module['temperature_c'] = float(temp_val)
 

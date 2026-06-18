@@ -30,7 +30,7 @@ EXPECTED = {
         "ports": 10, "linked": 6,
         "names": ["Port1", "Port2", "Port3", "Port4", "Port5", "Port6", "Port7",
                   "Port8", "uplink", "SFP+2"],
-        "mac_entries": 58, "sfp": 0, "poe": 8, "poe_voltage": True,
+        "mac_entries": 58, "sfp": 1, "poe": 8, "poe_voltage": True,
         "version": "2.21", "board": "CSS610-8P-2S+", "temp": 44,
     },
 }
