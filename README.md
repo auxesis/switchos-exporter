@@ -69,12 +69,34 @@ The exporter consists of three main components:
 
 ## Supported devices
 
-Tested against MikroTik switches running both **SwOS** and **SwOS Lite**:
+The exporter works with MikroTik switches running both **SwOS** and **SwOS Lite**
+(SwitchOS Lite). SwOS Lite — used by the CSS610 / CSS6xx family — serves the same
+`.b` web endpoints but with obfuscated field names (`i01`, `i02`, …). The exporter
+detects the format and translates it, so SwOS Lite switches get the same port,
+link, statistics and PoE coverage as SwOS.
 
-| OS | Examples | Notes |
-|----|----------|-------|
-| SwOS | CRS3xx (e.g. CRS309-1G-8S+IN), CSS106 | Full coverage: ports, SFP optics, port stats, VLANs, MAC, PoE |
-| SwOS Lite | CSS610-8P-2S+IN | Ports, link, speed, per-port byte/packet/error counters, and PoE. SwOS Lite uses obfuscated field names; the mapping was taken from the firmware web UI and is verified against hardware |
+### Tested hardware
+
+| Model | OS | Firmware | Ports |
+|-------|-----|----------|-------|
+| CRS309-1G-8S+IN | SwOS | 2.18 | 1× GbE + 8× SFP+ |
+| CSS106-1G-4P-1S | SwOS | 2.18 | 5× GbE (4× PoE-out) + 1× SFP |
+| CSS610-8P-2S+IN | SwOS Lite | 2.21 | 8× GbE PoE-out + 2× SFP+ |
+
+### Tested firmware
+
+The SwOS Lite field mappings (port statistics, link/port status, PoE) were
+extracted from the firmware web UI and cross-checked across every SwOS Lite
+**2.21** image. The statistics and link/port field IDs are identical across all
+five; the `poe.b` PoE mapping matches the two PoE-out firmwares.
+
+| Firmware | PoE-out support |
+|----------|-----------------|
+| `swos-css610out-2.21` | yes — `poe.b` (runs the tested CSS610-8P-2S+IN) |
+| `swos-css610pi-2.21` | yes — `poe.b` |
+| `swos-css606-2.21` | uses a different `poeoutports.b` endpoint (not yet decoded) |
+| `swos-css610-2.21` | PoE-in only (nothing to meter) |
+| `swos-css610g-2.21` | none |
 
 PoE-out metrics are emitted only for ports the switch reports as PoE-capable.
 
