@@ -18,6 +18,26 @@ from switchos_client import SwitchOSClient
 
 DEFAULT_PORT = 9000
 
+# Port-stat key -> labels for the detailed per-port counters.
+_PORT_ERROR_FIELDS = [
+    ('rx_fcs_errors', 'rx', 'fcs'),
+    ('rx_align_errors', 'rx', 'align'),
+    ('rx_runt_packets', 'rx', 'runt'),
+    ('rx_fragments', 'rx', 'fragment'),
+    ('rx_jabber', 'rx', 'jabber'),
+    ('rx_oversize', 'rx', 'oversize'),
+    ('rx_too_long', 'rx', 'too_long'),
+    ('tx_collisions', 'tx', 'collision'),
+    ('tx_late_collision', 'tx', 'late_collision'),
+    ('tx_excessive_coll', 'tx', 'excessive_collision'),
+]
+_PORT_PAUSE_FIELDS = [('rx_pause_packets', 'rx'), ('tx_pause_packets', 'tx')]
+_PORT_SIZE_BUCKETS = [
+    ('packets_64', '64'), ('packets_65_127', '65-127'),
+    ('packets_128_255', '128-255'), ('packets_256_511', '256-511'),
+    ('packets_512_1023', '512-1023'), ('packets_1024_max', '1024+'),
+]
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -103,7 +123,13 @@ class SwitchOSExporter:
             'Port speed in Mbps',
             ['device_name', 'port_name', 'port_index']
         )
-        
+
+        self.port_duplex = Gauge(
+            'switchos_port_duplex',
+            'Port duplex (1=full, 0=half/down)',
+            ['device_name', 'port_name', 'port_index']
+        )
+
         # Port statistics
         self.port_rx_bytes = Counter(
             'switchos_port_rx_bytes_total',
@@ -140,7 +166,27 @@ class SwitchOSExporter:
             'Total transmit errors',
             ['device_name', 'port_name', 'port_index']
         )
-        
+
+        # Detailed error breakdown (type = fcs/align/runt/fragment/jabber/
+        # oversize/too_long/collision/late_collision/excessive_collision)
+        self.port_error_frames = Counter(
+            'switchos_port_error_frames',
+            'Per-port error frames by direction and type',
+            ['device_name', 'port_name', 'port_index', 'direction', 'type']
+        )
+
+        self.port_pause_frames = Counter(
+            'switchos_port_pause_frames',
+            'Per-port pause (flow-control) frames by direction',
+            ['device_name', 'port_name', 'port_index', 'direction']
+        )
+
+        self.port_frames_by_size = Counter(
+            'switchos_port_frames_by_size',
+            'Per-port received frames bucketed by size',
+            ['device_name', 'port_name', 'port_index', 'size_bucket']
+        )
+
         # VLAN metrics
         self.vlan_count = Gauge(
             'switchos_vlan_count',
@@ -189,6 +235,12 @@ class SwitchOSExporter:
         self.sfp_voltage = Gauge(
             'switchos_sfp_voltage_volts',
             'SFP module supply voltage in volts',
+            ['device_name', 'sfp_index', 'vendor', 'part_number']
+        )
+
+        self.sfp_tx_bias = Gauge(
+            'switchos_sfp_tx_bias_milliamps',
+            'SFP module laser TX bias current in milliamps',
             ['device_name', 'sfp_index', 'vendor', 'part_number']
         )
 
@@ -345,6 +397,7 @@ class SwitchOSExporter:
                 self.port_status.labels(**port_labels).set(1 if port['enabled'] else 0)
                 self.port_link_status.labels(**port_labels).set(1 if port['linked'] else 0)
                 self.port_speed_mbps.labels(**port_labels).set(port['speed_mbps'])
+                self.port_duplex.labels(**port_labels).set(1 if port.get('full_duplex') else 0)
         
         # Port statistics
         if 'port_stats' in metrics:
@@ -368,7 +421,24 @@ class SwitchOSExporter:
                     self.port_rx_errors.labels(**port_labels)._value._value = port_stat['rx_errors']
                 if 'tx_errors' in port_stat:
                     self.port_tx_errors.labels(**port_labels)._value._value = port_stat['tx_errors']
-        
+
+                # Detailed error / pause / frame-size breakdowns
+                for key, direction, etype in _PORT_ERROR_FIELDS:
+                    if key in port_stat:
+                        self.port_error_frames.labels(
+                            **port_labels, direction=direction, type=etype
+                        )._value._value = port_stat[key]
+                for key, direction in _PORT_PAUSE_FIELDS:
+                    if key in port_stat:
+                        self.port_pause_frames.labels(
+                            **port_labels, direction=direction
+                        )._value._value = port_stat[key]
+                for key, bucket in _PORT_SIZE_BUCKETS:
+                    if key in port_stat:
+                        self.port_frames_by_size.labels(
+                            **port_labels, size_bucket=bucket
+                        )._value._value = port_stat[key]
+
         # VLAN metrics
         if 'vlan_table' in metrics:
             vlan_count = len(metrics['vlan_table'])
@@ -414,6 +484,8 @@ class SwitchOSExporter:
                     self.sfp_rx_power.labels(**sfp_labels).set(sfp['rx_power_mw'])
                 if 'voltage_v' in sfp:
                     self.sfp_voltage.labels(**sfp_labels).set(sfp['voltage_v'])
+                if 'tx_bias_ma' in sfp:
+                    self.sfp_tx_bias.labels(**sfp_labels).set(sfp['tx_bias_ma'])
 
         # PoE metrics
         if 'poe_ports' in metrics:

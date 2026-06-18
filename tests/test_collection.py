@@ -18,7 +18,7 @@ EXPECTED = {
         "names": ["router", "Port2", "Port3", "ceiling", "kitchen", "SFP"],
         "mac_entries": 57, "sfp": 0, "poe": 4, "poe_voltage": False,
         "version": "2.18", "board": "CSS106-1G-4P-1S", "temp": 41,
-        "psu_v": 25.1, "power_w": None, "sfp_volt": None,
+        "psu_v": 25.1, "power_w": None, "sfp_volt": None, "duplex_ports": 4,
     },
     "swos_crs309": {
         "ports": 9, "linked": 4,
@@ -26,7 +26,7 @@ EXPECTED = {
                   "SFP7", "poe0", "MGMT"],
         "mac_entries": 61, "sfp": 4, "poe": 0, "poe_voltage": False,
         "version": "2.18", "board": "CRS309-1G-8S+", "temp": 33,
-        "psu_v": None, "power_w": None, "sfp_volt": 3.279,
+        "psu_v": None, "power_w": None, "sfp_volt": 3.279, "duplex_ports": 4,
     },
     "swoslite_css610": {
         "ports": 10, "linked": 6,
@@ -34,7 +34,7 @@ EXPECTED = {
                   "Port8", "uplink", "SFP+2"],
         "mac_entries": 58, "sfp": 1, "poe": 8, "poe_voltage": True,
         "version": "2.21", "board": "CSS610-8P-2S+", "temp": 44,
-        "psu_v": 28.18, "power_w": 27.6, "sfp_volt": None,
+        "psu_v": 28.18, "power_w": 27.6, "sfp_volt": None, "duplex_ports": 6,
     },
 }
 
@@ -108,3 +108,41 @@ def test_poe(device_case):
     for p in poe:
         assert p["current_ma"] >= 0 and p["power_w"] >= 0
         assert ("voltage_v" in p) == exp["poe_voltage"]
+
+
+def test_port_duplex(device_case):
+    name, info, m = device_case
+    assert sum(1 for p in m["port_details"] if p.get("full_duplex")) \
+        == EXPECTED[name]["duplex_ports"]
+    # every linked port on these switches negotiates full duplex
+    for p in m["port_details"]:
+        if p["linked"]:
+            assert p["full_duplex"]
+
+
+BUCKETS = ["packets_64", "packets_65_127", "packets_128_255",
+           "packets_256_511", "packets_512_1023", "packets_1024_max"]
+
+
+def test_frame_size_histogram(device_case):
+    name, info, m = device_case
+    stats = m["port_stats"]
+    for s in stats:                      # all six buckets present per port
+        for bucket in BUCKETS:
+            assert bucket in s
+    assert sum(s["packets_64"] for s in stats) > 0   # real traffic
+
+
+def test_error_breakdown_present(device_case):
+    name, info, m = device_case
+    # the detailed rx error counters are parsed for every port
+    for s in m["port_stats"]:
+        assert "rx_fcs_errors" in s
+        assert "rx_runt_packets" in s
+
+
+def test_sfp_tx_bias():
+    """Optical modules report a laser TX bias current; copper DACs do not."""
+    optical = [x for x in collect("swos_crs309")["sfp_modules"] if x.get("tx_bias_ma")]
+    assert len(optical) == 1
+    assert optical[0]["tx_bias_ma"] == 33

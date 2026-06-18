@@ -42,12 +42,19 @@ The exporter consists of three main components:
 - `switchos_port_status`: Port enabled status (1=enabled, 0=disabled)
 - `switchos_port_link_status`: Port link status (1=linked, 0=down)
 - `switchos_port_speed_mbps`: Port speed in Mbps
+- `switchos_port_duplex`: Port duplex (1=full, 0=half/down)
 - `switchos_port_rx_bytes_total`: Total received bytes
 - `switchos_port_tx_bytes_total`: Total transmitted bytes
 - `switchos_port_rx_packets_total`: Total received packets
 - `switchos_port_tx_packets_total`: Total transmitted packets
-- `switchos_port_rx_errors_total`: Total receive errors
-- `switchos_port_tx_errors_total`: Total transmit errors
+- `switchos_port_rx_errors_total`: Total receive errors (aggregate)
+- `switchos_port_tx_errors_total`: Total transmit errors (aggregate)
+- `switchos_port_error_frames_total`: Error frames by `direction` (rx/tx) and
+  `type` (fcs, align, runt, fragment, jabber, oversize, too_long, collision,
+  late_collision, excessive_collision)
+- `switchos_port_pause_frames_total`: Pause (flow-control) frames by `direction`
+- `switchos_port_frames_by_size_total`: Received frames bucketed by `size_bucket`
+  (64, 65-127, 128-255, 256-511, 512-1023, 1024+)
 
 ### VLAN Metrics
 - `switchos_vlan_count`: Number of configured VLANs
@@ -60,6 +67,7 @@ The exporter consists of three main components:
 ### SFP Module Metrics
 - `switchos_sfp_temperature_celsius`: SFP module temperature (optical modules)
 - `switchos_sfp_voltage_volts`: SFP module supply voltage (optical modules)
+- `switchos_sfp_tx_bias_milliamps`: SFP laser TX bias current (optical modules)
 - `switchos_sfp_tx_power_mw`: SFP TX power in milliwatts
 - `switchos_sfp_rx_power_mw`: SFP RX power in milliwatts
 

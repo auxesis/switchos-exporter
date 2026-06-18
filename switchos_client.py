@@ -160,6 +160,7 @@ class SwitchOSClient:
         return {
             'en': data.get('i01', '0x0'),
             'lnk': data.get('i06', '0x0'),
+            'dpx': data.get('i07', '0x0'),
             'spd': data.get('i08', []),
             'nm': data.get('i0a', []),
         }
@@ -174,6 +175,7 @@ class SwitchOSClient:
         'i06': 'typ',   # Type
         'i08': 'tmp',   # Temperature
         'i09': 'vcc',   # Voltage
+        'i0a': 'tbs',   # Tx Bias (mA)
         'i0b': 'tpw',   # Tx Power
         'i0c': 'rpw',   # Rx Power
     }
@@ -238,6 +240,7 @@ class SwitchOSClient:
             types = sfp_data.get('typ', [])
             temperatures = sfp_data.get('tmp', [])
             voltages = sfp_data.get('vcc', [])
+            tx_bias = sfp_data.get('tbs', [])
             tx_power = sfp_data.get('tpw', [])
             rx_power = sfp_data.get('rpw', [])
             
@@ -276,7 +279,11 @@ class SwitchOSClient:
                         # SwOS voltage is millivolts (web UI scale 1E3 -> volts)
                         volt_val = self._hex_to_int(voltages[i])
                         module['voltage_v'] = volt_val / 1000.0 if volt_val else 0
-                    
+
+                    if i < len(tx_bias):
+                        # Tx laser bias current in mA (web UI scale 1)
+                        module['tx_bias_ma'] = self._hex_to_int(tx_bias[i])
+
                     if i < len(tx_power):
                         tx_val = tx_power[i]
                         if isinstance(tx_val, str):
@@ -319,7 +326,11 @@ class SwitchOSClient:
         'i11': 'tup', 'i14': 'tbp', 'i13': 'tmp',   # Tx unicast/broadcast/multicast
         'i17': 'rpp', 'i16': 'tpp',   # Rx/Tx Pauses
         'i1e': 'rfcs', 'i1b': 'rte', 'i19': 'rrp',  # Rx FCS / Too Long / Runts
+        'i1c': 'rjab', 'i1a': 'rfrg',  # Rx Jabber / Fragments
         'i1f': 'tcl', 'i20': 'tlc', 'i12': 'tec',   # Tx collisions / late / excessive
+        # Frame-size histogram (64 .. 1024+)
+        'i09': 'p64', 'i0a': 'p65', 'i0b': 'p128',
+        'i0c': 'p256', 'i0d': 'p512', 'i0e': 'p1k',
     }
 
     @classmethod
@@ -384,6 +395,8 @@ class SwitchOSClient:
                 'rr': 'rx_rate',           # RX rate
                 'rfcs': 'rx_fcs_errors',   # RX FCS errors
                 'rae': 'rx_align_errors',  # RX alignment errors
+                'rjab': 'rx_jabber',       # RX jabber frames
+                'rfrg': 'rx_fragments',    # RX fragment frames
                 'rte': 'rx_too_long',      # RX too long errors
                 'tb': 'tx_bytes',          # TX bytes
                 'tbh': 'tx_bytes_high',    # TX bytes high
@@ -399,12 +412,14 @@ class SwitchOSClient:
                 'tmc': 'tx_multi_coll',    # TX multiple collisions
                 'tpp': 'tx_pause_packets', # TX pause packets
                 'rpp': 'rx_pause_packets', # RX pause packets
-                'p64': 'packets_64',       # 64 byte packets
-                'p65': 'packets_65_127',   # 65-127 byte packets
-                'p128': 'packets_128_255', # 128-255 byte packets
-                'p256': 'packets_256_511', # 256-511 byte packets
-                'p512': 'packets_512_1023',# 512-1023 byte packets
-                'p1k': 'packets_1024_max', # 1024+ byte packets
+                # Frame-size histogram. Field prefix varies by model: p* (CRS309),
+                # r* (CSS106 rx histogram), or i09-i0e (SwOS Lite, translated).
+                'p64': 'packets_64',       'r64': 'packets_64',        # 64 bytes
+                'p65': 'packets_65_127',   'r65': 'packets_65_127',    # 65-127
+                'p128': 'packets_128_255', 'r128': 'packets_128_255',  # 128-255
+                'p256': 'packets_256_511', 'r256': 'packets_256_511',  # 256-511
+                'p512': 'packets_512_1023','r512': 'packets_512_1023', # 512-1023
+                'p1k': 'packets_1024_max', 'r1k': 'packets_1024_max',  # 1024+
             }
             
             # Process each port's stats
@@ -1118,7 +1133,10 @@ class SwitchOSClient:
             
             # Get link status bitmask
             lnk_mask = int(link_data.get('lnk', '0x0'), 16)
-            
+
+            # Get full-duplex bitmask
+            dpx_mask = int(link_data.get('dpx', '0x0'), 16)
+
             # Get port names (hex encoded)
             port_names = link_data.get('nm', [])
             
@@ -1168,7 +1186,8 @@ class SwitchOSClient:
                     'name': port_name,
                     'enabled': port_enabled,
                     'linked': port_linked,
-                    'speed_mbps': speed_mbps
+                    'speed_mbps': speed_mbps,
+                    'full_duplex': bool(dpx_mask & (1 << i)),
                 })
             
             logger.info(f"Parsed link metrics: {metrics['ports']}")
