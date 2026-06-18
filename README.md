@@ -1,5 +1,7 @@
 # MikroTik SwitchOS Prometheus Exporter
 
+[![tests](https://github.com/auxesis/switchos-exporter/actions/workflows/tests.yml/badge.svg)](https://github.com/auxesis/switchos-exporter/actions/workflows/tests.yml)
+
 A comprehensive Prometheus exporter for MikroTik switches running SwitchOS. This exporter reads its device list from a YAML config file and collects detailed metrics including port status, SFP module information, VLAN configuration, MAC address tables, and system information.
 
 ![Grafana Dashboard](dashboard.png)
