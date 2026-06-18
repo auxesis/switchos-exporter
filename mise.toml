@@ -13,9 +13,13 @@ _.python.venv = { path = ".venv", create = true }
 description = "Install Python dependencies into the project virtualenv"
 run = "pip install -r requirements.txt"
 
-[tasks.run]
-description = "Run the exporter (pass args after --, e.g. mise run run -- --port 9080 my.yaml)"
+[tasks.exporter]
+description = "Run the exporter (pass args after --, e.g. mise run exporter -- --port 9080 my.yaml)"
 run = "python3 switchos_exporter.py"
+
+[tasks.test]
+description = "Run the test suite"
+run = "pytest -q"
 
 [tasks.config]
 description = "Validate the device config file (prints the loaded devices)"
