@@ -74,7 +74,7 @@ Tested against MikroTik switches running both **SwOS** and **SwOS Lite**:
 | OS | Examples | Notes |
 |----|----------|-------|
 | SwOS | CRS3xx (e.g. CRS309-1G-8S+IN), CSS106 | Full coverage: ports, SFP optics, port stats, VLANs, MAC, PoE |
-| SwOS Lite | CSS610-8P-2S+IN | Ports, link, speed and PoE. Per-port byte/packet counters are not decoded (the SwOS Lite stats format uses obfuscated, version-specific field names) |
+| SwOS Lite | CSS610-8P-2S+IN | Ports, link, speed, per-port byte/packet/error counters, and PoE. SwOS Lite uses obfuscated field names; the mapping was taken from the firmware web UI and is verified against hardware |
 
 PoE-out metrics are emitted only for ports the switch reports as PoE-capable.
 

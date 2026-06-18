@@ -281,12 +281,34 @@ class SwitchOSClient:
         
         return metrics
     
+    # SwOS Lite !stats.b obfuscated field name -> canonical SwOS stat key.
+    # Mapping taken from the SwOS Lite web UI (swos-css610out-2.21.bin): the
+    # stats/errors tables read these i0x ids for each labelled column.
+    # Verified identical across all SwOS Lite 2.21 firmwares (css606, css610,
+    # css610g, css610out, css610pi), as are the link.b field ids below.
+    _SWOSLITE_STATS_MAP = {
+        'i01': 'rb',  'i02': 'rbh',   # Rx Bytes (low/high)
+        'i0f': 'tb',  'i10': 'tbh',   # Tx Bytes (low/high)
+        'i23': 'rtp', 'i24': 'ttp',   # Rx/Tx Total Packets
+        'i05': 'rup', 'i07': 'rbp', 'i08': 'rmp',   # Rx unicast/broadcast/multicast
+        'i11': 'tup', 'i14': 'tbp', 'i13': 'tmp',   # Tx unicast/broadcast/multicast
+        'i17': 'rpp', 'i16': 'tpp',   # Rx/Tx Pauses
+        'i1e': 'rfcs', 'i1b': 'rte', 'i19': 'rrp',  # Rx FCS / Too Long / Runts
+        'i1f': 'tcl', 'i20': 'tlc', 'i12': 'tec',   # Tx collisions / late / excessive
+    }
+
+    @classmethod
+    def _translate_swoslite_stats(cls, data: Dict) -> Dict:
+        """Map SwOS Lite !stats.b obfuscated keys to canonical SwOS keys."""
+        return {canon: data[obf] for obf, canon in cls._SWOSLITE_STATS_MAP.items()
+                if obf in data}
+
     def get_port_stats(self, device_ip: str) -> Optional[Dict]:
         """Get port statistics from device.
 
         SwOS serves stats at /stats.b on some models (e.g. CRS309) and at
         /!stats.b on others (e.g. CSS106), so try both. SwOS Lite serves stats
-        with obfuscated field names we don't decode, so those are skipped.
+        at /!stats.b with obfuscated field names, which are translated.
         """
         headers = {
             'Accept': '*/*',
@@ -310,10 +332,9 @@ class SwitchOSClient:
             except Exception as e:
                 logger.error(f"Failed to parse port stats from {device_ip}/{path}: {e}")
                 continue
-            # SwOS Lite obfuscates the stat field names (i01..); not decoded.
+            # SwOS Lite uses obfuscated field names (i01..); translate them.
             if 'i01' in data and 'rb' not in data:
-                logger.debug(f"Port stats from {device_ip}/{path} use the SwOS Lite format; skipping")
-                return {}
+                data = self._translate_swoslite_stats(data)
             return data
 
         logger.debug(f"No port stats available from {device_ip}")

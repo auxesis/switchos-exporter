@@ -28,3 +28,6 @@ Thumbs.db
 
 # user configuration
 devices.yaml
+
+# vendor firmware images (used only for reverse-engineering)
+*.bin
