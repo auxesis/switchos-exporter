@@ -7,10 +7,12 @@ A comprehensive Prometheus exporter for MikroTik switches running SwitchOS. This
 ## Features
 
 - **Simple Device Inventory**: Lists MikroTik switches in a YAML config file — no external dependencies
+- **SwOS and SwOS Lite**: Works with both MikroTik switch operating systems
 - **Comprehensive Metrics Collection**: 
   - Device status and system information
   - Port status, link state, and statistics
   - SFP module temperature and optical power levels
+  - PoE-out current, voltage and power per port
   - VLAN configuration and membership
   - MAC address table entries
 - **HTTP Digest Authentication**: Secure authentication with SwitchOS devices
@@ -56,8 +58,25 @@ The exporter consists of three main components:
 - `switchos_sfp_tx_power_mw`: SFP TX power in milliwatts
 - `switchos_sfp_rx_power_mw`: SFP RX power in milliwatts
 
+### PoE Metrics (PoE-out switches: CSS106-xP, CSS610-xP, …)
+- `switchos_poe_status`: PoE-out port status code (0=off, >0=enabled/delivering)
+- `switchos_poe_current_milliamps`: PoE-out current draw in mA
+- `switchos_poe_power_watts`: PoE-out power delivered in watts
+- `switchos_poe_voltage_volts`: PoE-out voltage (SwOS Lite devices only)
+
 ### Device Information
 - `switchos_device_info`: Device metadata (version, model, serial, etc.)
+
+## Supported devices
+
+Tested against MikroTik switches running both **SwOS** and **SwOS Lite**:
+
+| OS | Examples | Notes |
+|----|----------|-------|
+| SwOS | CRS3xx (e.g. CRS309-1G-8S+IN), CSS106 | Full coverage: ports, SFP optics, port stats, VLANs, MAC, PoE |
+| SwOS Lite | CSS610-8P-2S+IN | Ports, link, speed and PoE. Per-port byte/packet counters are not decoded (the SwOS Lite stats format uses obfuscated, version-specific field names) |
+
+PoE-out metrics are emitted only for ports the switch reports as PoE-capable.
 
 ## Configuration
 

@@ -170,6 +170,29 @@ class SwitchOSExporter:
             ['device_name', 'sfp_index', 'vendor', 'part_number']
         )
         
+        # PoE metrics (PoE-out capable switches: CSS106-xP, CSS610-xP)
+        poe_labels = ['device_name', 'port_name', 'port_index']
+        self.poe_status = Gauge(
+            'switchos_poe_status',
+            'PoE-out port status code (0=off; vendor-specific, >0=enabled/delivering)',
+            poe_labels
+        )
+        self.poe_current = Gauge(
+            'switchos_poe_current_milliamps',
+            'PoE-out current draw in milliamps',
+            poe_labels
+        )
+        self.poe_power = Gauge(
+            'switchos_poe_power_watts',
+            'PoE-out power delivered in watts',
+            poe_labels
+        )
+        self.poe_voltage = Gauge(
+            'switchos_poe_voltage_volts',
+            'PoE-out voltage in volts (SwOS Lite only)',
+            poe_labels
+        )
+
         # Info metrics
         self.device_info = Info(
             'switchos_device_info',
@@ -354,7 +377,21 @@ class SwitchOSExporter:
                     self.sfp_tx_power.labels(**sfp_labels).set(sfp['tx_power_mw'])
                 if 'rx_power_mw' in sfp:
                     self.sfp_rx_power.labels(**sfp_labels).set(sfp['rx_power_mw'])
-    
+
+        # PoE metrics
+        if 'poe_ports' in metrics:
+            for poe in metrics['poe_ports']:
+                poe_labels = {
+                    'device_name': labels['device_name'],
+                    'port_name': self.sanitize_label(poe['port_name']),
+                    'port_index': str(poe['port_index'])
+                }
+                self.poe_status.labels(**poe_labels).set(poe['status'])
+                self.poe_current.labels(**poe_labels).set(poe['current_ma'])
+                self.poe_power.labels(**poe_labels).set(poe['power_w'])
+                if 'voltage_v' in poe:
+                    self.poe_voltage.labels(**poe_labels).set(poe['voltage_v'])
+
     def collect_all_metrics(self):
         """Collect metrics from all devices"""
         cycle_start = time.time()

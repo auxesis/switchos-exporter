@@ -136,12 +136,32 @@ class SwitchOSClient:
                 json_text = json_text.replace("'", '"')
                 
                 # Parse the fixed JSON
-                return json.loads(json_text)
+                data = json.loads(json_text)
+                # SwOS Lite (e.g. CSS610) obfuscates field names as i01, i02...
+                # Remap the ones we need to the canonical SwOS keys.
+                if 'i0a' in data and 'nm' not in data:
+                    data = self._translate_swoslite_link(data)
+                return data
             except Exception as e:
                 logger.error(f"Failed to parse link status response: {e}")
                 logger.error(f"Response text: {response.text[:500]}")
                 return {}
         return {}
+
+    @staticmethod
+    def _translate_swoslite_link(data: Dict) -> Dict:
+        """Map SwOS Lite link.b obfuscated keys to canonical SwOS keys.
+
+        Verified against a CSS610-8P-2S+IN: i01=enabled mask, i06=link mask,
+        i08=per-port speed codes, i0a=hex-encoded port names. The link mask
+        matches exactly the ports whose speed code is not "down".
+        """
+        return {
+            'en': data.get('i01', '0x0'),
+            'lnk': data.get('i06', '0x0'),
+            'spd': data.get('i08', []),
+            'nm': data.get('i0a', []),
+        }
     
     def get_sfp_status(self, device_ip: str) -> Optional[Dict]:
         """Get SFP module status from device"""
@@ -262,40 +282,41 @@ class SwitchOSClient:
         return metrics
     
     def get_port_stats(self, device_ip: str) -> Optional[Dict]:
-        """Get port statistics from device"""
-        url = f"http://{device_ip}/stats.b"
+        """Get port statistics from device.
+
+        SwOS serves stats at /stats.b on some models (e.g. CRS309) and at
+        /!stats.b on others (e.g. CSS106), so try both. SwOS Lite serves stats
+        with obfuscated field names we don't decode, so those are skipped.
+        """
         headers = {
             'Accept': '*/*',
             'Accept-Language': 'en-US,en;q=0.9',
             'Referer': f'http://{device_ip}/index.html'
         }
-        
-        response = self._make_request('GET', url, headers=headers)
-        if response:
-            # Some switch models don't serve port stats and return an empty body
-            # or the HTML web UI instead of the expected `{...}` object notation.
-            # Treat anything that isn't the stats payload as "no stats available".
-            body = response.text.strip()
-            if not body.startswith('{'):
-                logger.debug(f"No port stats available from {device_ip} "
-                             f"(unexpected response, {len(body)} bytes)")
-                return {}
+
+        for path in ('stats.b', '!stats.b'):
+            response = self._make_request('GET', f"http://{device_ip}/{path}", headers=headers)
+            if not response:
+                continue
+            # Skip empty bodies or the HTML web UI (endpoint not served here)
+            if not response.text.strip().startswith('{'):
+                continue
             try:
-                # Parse the JavaScript object notation
                 import re
                 import json
-
-                # Add quotes around keys
                 json_text = re.sub(r'([{,])([a-zA-Z_]\w*):', r'\1"\2":', response.text)
-
-                # Add quotes around hex values
                 json_text = re.sub(r'([:, \[])?(0x[0-9a-fA-F]+)([,\]}])', r'\1"\2"\3', json_text)
-
-                # Parse the fixed JSON
-                return json.loads(json_text)
+                data = json.loads(json_text)
             except Exception as e:
-                logger.error(f"Failed to parse port stats response: {e}")
+                logger.error(f"Failed to parse port stats from {device_ip}/{path}: {e}")
+                continue
+            # SwOS Lite obfuscates the stat field names (i01..); not decoded.
+            if 'i01' in data and 'rb' not in data:
+                logger.debug(f"Port stats from {device_ip}/{path} use the SwOS Lite format; skipping")
                 return {}
+            return data
+
+        logger.debug(f"No port stats available from {device_ip}")
         return {}
     
     def parse_port_stats(self, stats_data: Dict, port_details: List[Dict]) -> Dict[str, Any]:
@@ -1052,6 +1073,92 @@ class SwitchOSClient:
         
         return metrics
     
+    @staticmethod
+    def _hex_to_int(value: Any) -> int:
+        """Coerce a hex string ('0x..'), quoted hex, or int to an int."""
+        if isinstance(value, int):
+            return value
+        if isinstance(value, str):
+            value = value.strip('"')
+            try:
+                return int(value, 16) if value.lower().startswith('0x') else int(value)
+            except ValueError:
+                return 0
+        return 0
+
+    def get_poe_data(self, device_ip: str, link_data: Dict) -> Dict:
+        """Return raw PoE data, or {} if the device has no PoE.
+
+        SwOS embeds PoE fields (poes/curr/pwr) directly in link.b; SwOS Lite
+        serves a dedicated /poe.b with obfuscated field names.
+        """
+        if 'poes' in link_data or 'pwr' in link_data:  # SwOS
+            return link_data
+
+        headers = {
+            'Accept': '*/*',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Referer': f'http://{device_ip}/index.html'
+        }
+        response = self._make_request('GET', f"http://{device_ip}/poe.b", headers=headers)
+        if not response or not response.text.strip().startswith('{'):
+            return {}
+        try:
+            import re
+            import json
+            json_text = re.sub(r'([{,])([a-zA-Z_]\w*):', r'\1"\2":', response.text)
+            json_text = re.sub(r'([:, \[])?(0x[0-9a-fA-F]+)([,\]}])', r'\1"\2"\3', json_text)
+            json_text = json_text.replace("'", '"')  # single-quoted strings -> JSON
+            return json.loads(json_text)
+        except Exception as e:
+            logger.error(f"Failed to parse PoE response from {device_ip}: {e}")
+            return {}
+
+    def parse_poe_metrics(self, poe_data: Dict, port_details: List[Dict]) -> Dict[str, Any]:
+        """Parse PoE-out data into per-port metrics.
+
+        Two formats, both decoded against real hardware (P = V * I verified):
+          SwOS (link.b):     poes=status, curr=current(mA), pwr=power(0.1W)
+          SwOS Lite (poe.b): i04=status, i05=current(mA), i06=voltage(0.1V),
+                             i07=power(0.1W)
+        Only ports with a non-zero PoE status are emitted, which matches the
+        switch's PoE port count (e.g. 4 on a CSS106-4P, 8 on a CSS610-8P).
+        """
+        metrics = {'poe_ports': []}
+
+        if 'poes' in poe_data:            # SwOS
+            status_a, curr_a, pwr_a, volt_a = (
+                poe_data.get('poes', []), poe_data.get('curr', []),
+                poe_data.get('pwr', []), [])
+        elif 'i04' in poe_data:           # SwOS Lite
+            status_a, curr_a, volt_a, pwr_a = (
+                poe_data.get('i04', []), poe_data.get('i05', []),
+                poe_data.get('i06', []), poe_data.get('i07', []))
+        else:
+            return metrics
+
+        for i, port in enumerate(port_details):
+            if i >= len(status_a):
+                continue
+            status = self._hex_to_int(status_a[i])
+            if status == 0:               # not a PoE-out port
+                continue
+            entry = {
+                'port_index': port['index'],
+                'port_name': port['name'],
+                'status': status,
+                'current_ma': self._hex_to_int(curr_a[i]) if i < len(curr_a) else 0,
+                'power_w': (self._hex_to_int(pwr_a[i]) if i < len(pwr_a) else 0) / 10.0,
+            }
+            if volt_a and i < len(volt_a):
+                entry['voltage_v'] = self._hex_to_int(volt_a[i]) / 10.0
+            metrics['poe_ports'].append(entry)
+
+        powered = sum(1 for p in metrics['poe_ports'] if p['power_w'] > 0)
+        logger.info(f"Parsed PoE for {len(metrics['poe_ports'])} ports "
+                    f"({powered} delivering power)")
+        return metrics
+
     def collect_metrics(self, device_ip: str, device_info: Dict[str, Any]) -> Dict[str, Any]:
         """Collect all metrics from a device"""
         # Credentials are resolved per-device by the config loader
@@ -1085,7 +1192,14 @@ class SwitchOSClient:
             if stats_data and 'port_details' in link_metrics:
                 stats_metrics = self.parse_port_stats(stats_data, link_metrics['port_details'])
                 metrics.update(stats_metrics)
-            
+
+            # Get PoE status (SwOS embeds it in link.b; SwOS Lite has poe.b)
+            if 'port_details' in link_metrics:
+                poe_data = self.get_poe_data(device_ip, link_data)
+                if poe_data:
+                    poe_metrics = self.parse_poe_metrics(poe_data, link_metrics['port_details'])
+                    metrics.update(poe_metrics)
+
             # Get VLAN configuration
             vlan_data = self.get_vlan_config(device_ip)
             if vlan_data and 'port_details' in link_metrics:
